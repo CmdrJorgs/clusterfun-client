@@ -2,10 +2,18 @@ import StressatoAssets from "games/stressgame/assets/Assets";
 import TemplateAssets from "games/TemplateGame/assets/Assets";
 import CollageBoardAssets from "games/CollageBoard/assets/Assets";
 import FaceOffAssets from "games/FaceOff/assets/Assets";
+import SushiSyncAssets from "games/SushiSync/assets/Assets";
 import { GameDescriptor } from "./GameDescriptor";
 import releaseGames from "./gamesListRelease";
 
 const debugOnlyGames: GameDescriptor[] = [
+  {
+    name: "SushiSync",
+    displayName: "Sushi Sync",
+    tags: ["debug"],
+    logoName: SushiSyncAssets.images.logo,
+    importThunk: () => import("../SushiSync/views/GameComponent"),
+  },
   {
     name: "FaceOff",
     displayName: "Face Off",

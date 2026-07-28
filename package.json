@@ -7,7 +7,7 @@
     "start": "env-cmd -f .env.dev react-scripts start",
     "startlocal": "env-cmd -f .env.local react-scripts start",
     "build": "react-scripts build --stats",
-    "test": "react-scripts test --watchAll=false --passWithNoTests",
+    "test": "react-scripts test --watchAll=false",
     "analyze": "webpack-bundle-analyzer build/bundle-stats.json",
     "eject": "react-scripts eject",
     "watch": "title Lobby Watcher && node scripts/watch.js",
@@ -18,6 +18,12 @@
     "extends": [
       "react-app",
       "react-app/jest"
+    ]
+  },
+  "jest": {
+    "testMatch": [
+      "**/src/**/__tests__/**/*.{js,jsx,ts,tsx}",
+      "**/src/**/*.{spec,test}.{js,jsx,ts,tsx}"
     ]
   },
   "browserslist": {

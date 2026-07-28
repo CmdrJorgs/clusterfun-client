@@ -55,6 +55,14 @@ export interface GamePresentation {
 // Hand-authored presentation for the games we ship; anything else falls
 // back to derived defaults so the catalog can grow without edits here.
 const KNOWN: Record<string, Partial<GamePresentation>> = {
+  SushiSync: {
+    category: "Co-op",
+    blurb:
+      "Ring your phones around the screen to form one conveyor belt, then pass sushi chef-to-chef before the customers walk.",
+    players: "3–8",
+    playTime: "15m",
+    thumbKind: "bars",
+  },
   Mixtape: {
     category: "Music",
     blurb: "Match the perfect song to the scenario, then rank the room's picks to crown a winner.",

@@ -1,0 +1,379 @@
+/* Sushi Sync - the shared "order board" screen.  Virtual canvas is 1920x1080. */
+
+.gamepresenter {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(160deg, #10131c 0%, #171a26 55%, #1d1622 100%);
+  color: #f2ece2;
+  overflow: hidden;
+  font-size: 36px;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.gamepresenter button {
+  font-size: 100%;
+  padding: 10px 22px;
+  border: none;
+  border-radius: 8px;
+  background: #e8613c;
+  color: #fff8f0;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.gamepresenter button:disabled {
+  background: #4a4550;
+  color: #8d8794;
+  cursor: default;
+}
+
+.gamepresenter .button,
+.gamepresenter .presenterButton {
+  font-size: 90%;
+}
+
+.gamepresenter .divRow {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+}
+
+.gamepresenter .roomCode {
+  margin-right: 50px;
+  font-weight: 700;
+  letter-spacing: 2px;
+}
+
+.gamepresenter .nameBox {
+  padding: 14px 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #232735;
+  border-radius: 12px;
+  margin: 8px;
+}
+
+.gamepresenter .gameTitle {
+  font-size: 150%;
+  font-weight: 800;
+  letter-spacing: 4px;
+}
+
+/* ---------------------------------------------------------------- Join screen */
+
+.joinHeadline {
+  font-size: 130%;
+  font-weight: 800;
+  letter-spacing: 3px;
+  margin-bottom: 10px;
+}
+
+.joinHint {
+  font-size: 70%;
+  color: #b9b2c4;
+  margin-bottom: 18px;
+}
+
+.playerWrap {
+  display: flex;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+/* ---------------------------------------------------------------- Seating ring */
+
+.ringFrame {
+  position: relative;
+  width: 760px;
+  height: 760px;
+  margin: 0 auto;
+}
+
+.ringTrack {
+  position: absolute;
+  inset: 90px;
+  border: 14px solid #2f3446;
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+
+.ringCenter {
+  position: absolute;
+  inset: 210px;
+  border-radius: 50%;
+  background: #191d29;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 60%;
+  color: #b9b2c4;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+.seatChip {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  background: #2b3142;
+  border-radius: 14px;
+  padding: 10px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: 52%;
+  min-width: 130px;
+  border: 3px solid transparent;
+}
+
+.seatIndex {
+  font-weight: 800;
+  color: #f0a93b;
+  font-size: 90%;
+}
+
+.beltPlateDot {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: #f5efe4;
+  color: #21242f;
+  font-size: 26px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 4px solid #cfc4ae;
+  box-sizing: border-box;
+}
+
+.beltPlateDotHeld {
+  opacity: 0.35;
+}
+
+/* ---------------------------------------------------------------- Order board */
+
+.playingGrid {
+  display: flex;
+  gap: 30px;
+  align-items: flex-start;
+}
+
+.orderBoard {
+  flex: 1 1 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 16px;
+  min-height: 300px;
+}
+
+.orderCard {
+  background: #232735;
+  border-radius: 14px;
+  padding: 14px 18px;
+  width: 400px;
+  box-sizing: border-box;
+  border-left: 10px solid #3f8f6f;
+}
+
+.orderCardUrgent {
+  border-left-color: #e0453c;
+  background: #33222a;
+}
+
+.orderTable {
+  font-size: 62%;
+  color: #f0a93b;
+  font-weight: 800;
+  letter-spacing: 2px;
+}
+
+.orderDish {
+  font-size: 80%;
+  font-weight: 700;
+  margin: 2px 0 8px 0;
+}
+
+.orderRecipe {
+  font-size: 46%;
+  color: #d8d2e0;
+  line-height: 1.5;
+}
+
+.layerChip {
+  display: inline-block;
+  background: #171a24;
+  border-radius: 6px;
+  padding: 2px 10px;
+  margin: 0 6px 6px 0;
+}
+
+.patienceTrack {
+  margin-top: 10px;
+  height: 12px;
+  background: #171a24;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.patienceFill {
+  height: 100%;
+  background: #3f8f6f;
+}
+
+.patienceFillUrgent {
+  background: #e0453c;
+}
+
+.emptyBoard {
+  font-size: 60%;
+  color: #8d8794;
+  padding: 40px;
+}
+
+/* ---------------------------------------------------------------- Status rail */
+
+.statusRail {
+  display: flex;
+  align-items: center;
+  gap: 40px;
+  margin-bottom: 20px;
+  font-size: 70%;
+}
+
+.tillAmount {
+  font-weight: 800;
+  color: #6fd39b;
+  font-size: 130%;
+}
+
+.strikePips {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.pip {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 4px solid #6b6478;
+  box-sizing: border-box;
+}
+
+.pipLit {
+  background: #e0453c;
+  border-color: #e0453c;
+}
+
+.pipPartial {
+  background: linear-gradient(to top, #e0453c 50%, transparent 50%);
+  border-color: #e0453c;
+}
+
+.roundClock {
+  font-weight: 800;
+}
+
+.roundClockLow {
+  color: #e0453c;
+}
+
+/* ---------------------------------------------------------------- Briefing */
+
+.briefingTable {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.briefingChef {
+  background: #232735;
+  border-radius: 14px;
+  padding: 16px 20px;
+  min-width: 320px;
+}
+
+.briefingChefName {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 70%;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.briefingIngredients {
+  font-size: 52%;
+  color: #f0a93b;
+  line-height: 1.6;
+}
+
+/* ---------------------------------------------------------------- Results */
+
+.reportRow {
+  display: flex;
+  gap: 60px;
+  font-size: 70%;
+  margin: 20px 0;
+}
+
+.reportStat {
+  display: flex;
+  flex-direction: column;
+}
+
+.reportStatLabel {
+  font-size: 60%;
+  color: #b9b2c4;
+  letter-spacing: 2px;
+}
+
+.starRow {
+  font-size: 160%;
+  letter-spacing: 10px;
+  color: #f0a93b;
+}
+
+.winnerBanner {
+  font-size: 110%;
+  font-weight: 800;
+  padding: 20px 0;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.failBanner {
+  color: #e0453c;
+}
+
+.statTable {
+  font-size: 55%;
+  border-collapse: collapse;
+  margin-top: 16px;
+}
+
+.statTable th {
+  text-align: left;
+  color: #b9b2c4;
+  padding: 6px 28px 6px 0;
+  font-weight: 600;
+}
+
+.statTable td {
+  padding: 8px 28px 8px 0;
+}
+
+.statName {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}

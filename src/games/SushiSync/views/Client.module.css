@@ -1,0 +1,308 @@
+/* Sushi Sync - the chef's phone.  Virtual canvas is 1080x1920 (portrait). */
+
+.gameclient {
+  width: 100%;
+  min-height: var(--sw-fill-height, 1920px);
+  background-color: #14161f;
+  color: #f2ece2;
+  overflow: hidden;
+  font-size: 40px;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  position: relative;
+}
+
+.gameclient button {
+  font-size: 100%;
+  border: none;
+  border-radius: 12px;
+  background: #2b3142;
+  color: #f2ece2;
+  padding: 18px 20px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.gameclient button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ---------------------------------------------------------------- top bar */
+
+.topBar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 20px;
+  background: #1c1f2b;
+  font-size: 55%;
+}
+
+.topBarName {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+}
+
+.topBarStation {
+  margin-left: auto;
+  color: #f0a93b;
+  font-weight: 800;
+}
+
+.statusStrip {
+  display: flex;
+  gap: 24px;
+  font-size: 42%;
+  color: #b9b2c4;
+  padding: 0 20px 10px 20px;
+}
+
+/* ---------------------------------------------------------------- belt zone (top 25%) */
+
+.beltZone {
+  height: 420px;
+  box-sizing: border-box;
+  background: #10121a;
+  border-bottom: 6px solid #2f3446;
+  position: relative;
+  overflow: hidden;
+}
+
+.beltZoneLabel {
+  position: absolute;
+  top: 10px;
+  left: 18px;
+  font-size: 32px;
+  letter-spacing: 3px;
+  color: #6b6478;
+}
+
+.beltRail {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 6px;
+  background: #2f3446;
+}
+
+.beltPlate {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  min-width: 170px;
+  background: #f5efe4;
+  color: #21242f;
+  border-radius: 16px;
+  padding: 12px 16px;
+  text-align: center;
+  border: 4px solid #cfc4ae;
+  box-sizing: border-box;
+  cursor: pointer;
+}
+
+.beltPlateMine {
+  border-color: #f0a93b;
+  box-shadow: 0 0 24px rgba(240, 169, 59, 0.7);
+}
+
+.beltPlateTable {
+  font-size: 42px;
+  font-weight: 800;
+}
+
+.beltPlateStack {
+  font-size: 26px;
+  color: #5c5548;
+  line-height: 1.3;
+  margin-top: 4px;
+}
+
+.beltEmpty {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #4d4757;
+  font-size: 40px;
+}
+
+/* ---------------------------------------------------------------- workstation (bottom 75%) */
+
+.workstation {
+  box-sizing: border-box;
+  padding: 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.plateCard {
+  background: #232735;
+  border-radius: 18px;
+  padding: 22px;
+}
+
+.plateTable {
+  font-size: 72%;
+  font-weight: 800;
+  color: #f0a93b;
+  letter-spacing: 2px;
+}
+
+.plateHint {
+  font-size: 38%;
+  color: #8d8794;
+  margin-top: 6px;
+}
+
+.stackRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+  min-height: 60px;
+}
+
+.stackChip {
+  background: #171a24;
+  border-radius: 10px;
+  padding: 8px 16px;
+  font-size: 42%;
+}
+
+.stackEmpty {
+  color: #6b6478;
+  font-size: 42%;
+  padding: 8px 0;
+}
+
+.emptyBench {
+  background: #1a1d28;
+  border: 4px dashed #2f3446;
+  border-radius: 18px;
+  padding: 44px 20px;
+  text-align: center;
+  color: #6b6478;
+  font-size: 48%;
+}
+
+.sectionLabel {
+  font-size: 36%;
+  letter-spacing: 3px;
+  color: #6b6478;
+}
+
+.ingredientGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.ingredientButton {
+  background: #35406b;
+  font-size: 52%;
+  font-weight: 700;
+  flex: 1 1 40%;
+}
+
+.ingredientButtonHint {
+  background: #6b5a1e;
+}
+
+.ingredientCategory {
+  display: block;
+  font-size: 60%;
+  font-weight: 400;
+  color: #b9b2c4;
+}
+
+.actionRow {
+  display: flex;
+  gap: 14px;
+}
+
+.actionRow button {
+  flex: 1 1 0;
+  font-size: 50%;
+  font-weight: 700;
+}
+
+.trashButton {
+  background: #4a2a2a;
+}
+
+.serveButton {
+  background: #2f7d55;
+}
+
+/* ---------------------------------------------------------------- seating / briefing */
+
+.centerPanel {
+  padding: 44px;
+  text-align: center;
+}
+
+.bigStation {
+  font-size: 190%;
+  font-weight: 800;
+  color: #f0a93b;
+  margin: 12px 0;
+}
+
+.neighborRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  font-size: 52%;
+  margin: 26px 0;
+  color: #d8d2e0;
+}
+
+.neighborYou {
+  background: #2b3142;
+  border-radius: 12px;
+  padding: 10px 18px;
+  font-weight: 800;
+}
+
+.swapRow {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  margin-top: 22px;
+}
+
+.briefingList {
+  font-size: 68%;
+  color: #f0a93b;
+  line-height: 1.8;
+  margin: 22px 0;
+  font-weight: 700;
+}
+
+.subtle {
+  font-size: 44%;
+  color: #8d8794;
+  line-height: 1.5;
+}
+
+/* ---------------------------------------------------------------- toast */
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 60px;
+  transform: translateX(-50%);
+  background: #f0a93b;
+  color: #21242f;
+  font-size: 46%;
+  font-weight: 700;
+  padding: 18px 30px;
+  border-radius: 14px;
+  text-align: center;
+  max-width: 80%;
+}
