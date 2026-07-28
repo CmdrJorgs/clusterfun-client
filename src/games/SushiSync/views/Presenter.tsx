@@ -32,6 +32,12 @@ import { ingredientName } from "../models/sushiSyncLogic";
 // The patience bar turns red (and the card highlights) below this fraction remaining.
 const URGENT_PATIENCE = 0.33;
 
+// Plate radii on the belt ring.  Plates riding the loop sit ON the belt; a plate a chef has
+// pulled onto their bench is drawn further in, so the ring only ever shows what is actually
+// travelling.  The gap has to be big enough to read at a glance from across the room.
+const BELT_RADIUS = 205;
+const BENCH_RADIUS = 148;
+
 // ------------------------------------------------------------------------------------------
 // Shared bits
 // ------------------------------------------------------------------------------------------
@@ -273,14 +279,17 @@ class PlayingPage extends React.Component<{
         })}
 
         {appModel.plates.map((plate) => {
-          // A held plate is on a bench, not the loop - park it on its holder's seat, dimmed.
+          // A held plate has been lifted OFF the conveyor onto a chef's bench.  Draw it
+          // inside the loop, next to whoever is holding it - at the belt radius it reads as
+          // still riding the belt, which is exactly the confusion we want to avoid.
           const holder = plate.heldBy
             ? appModel.players.find((p) => p.playerId === plate.heldBy)
             : undefined;
           const pos = holder ? holder.stationIndex + 0.5 : plate.beltPos;
+          const radius = holder ? BENCH_RADIUS : BELT_RADIUS;
           const angle = (pos / count) * 2 * Math.PI - Math.PI / 2;
-          const left = 310 + Math.cos(angle) * 205;
-          const top = 310 + Math.sin(angle) * 205;
+          const left = 310 + Math.cos(angle) * radius;
+          const top = 310 + Math.sin(angle) * radius;
           return (
             <div
               className={classNames(styles.beltPlateDot, {
@@ -288,7 +297,11 @@ class PlayingPage extends React.Component<{
               })}
               key={plate.id}
               style={{ left, top }}
-              title={`Table ${plate.tableNumber}`}
+              title={
+                holder
+                  ? `Table ${plate.tableNumber} - on ${holder.name}'s bench`
+                  : `Table ${plate.tableNumber}`
+              }
             >
               {plate.tableNumber}
             </div>

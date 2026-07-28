@@ -152,8 +152,17 @@
   box-sizing: border-box;
 }
 
+/* A plate lifted off the belt onto a chef's bench.  Drawn inside the ring (see
+   BENCH_RADIUS in Presenter.tsx), smaller and outlined rather than filled, so at a glance
+   the ring reads as "still travelling" and the inside as "someone is working on it". */
 .beltPlateDotHeld {
-  opacity: 0.35;
+  width: 40px;
+  height: 40px;
+  font-size: 19px;
+  opacity: 0.9;
+  background: #2a2f3d;
+  color: #f5efe4;
+  border: 3px dashed #8d93a6;
 }
 
 /* ---------------------------------------------------------------- Order board */
