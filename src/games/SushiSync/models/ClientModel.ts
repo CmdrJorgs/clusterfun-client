@@ -110,6 +110,14 @@ export class SushiSyncClientModel extends ClusterfunClientModel {
   @observable toastMessage = "";
   private _toastClearTime = 0;
 
+  /**
+   * Game time at the previous belt tick, so we can turn onTick's ABSOLUTE time into a
+   * per-frame delta.  -1 means "no previous tick" (fresh start, restore, or resume after
+   * a pause), in which case we skip one frame rather than treat the whole elapsed game
+   * as a single step.
+   */
+  private _lastBeltTickTime = -1;
+
   /** True while a request is in flight, so a double-tap cannot double-fire. */
   @observable busy = false;
 
@@ -126,7 +134,31 @@ export class SushiSyncClientModel extends ClusterfunClientModel {
   reconstitute() {
     super.reconstitute();
     this.listenToEndpointFromPresenter(SushiSyncBeltPushEndpoint, this.handleBeltPush);
+
+    // Drive the local belt extrapolation from the model, not from a view constructor:
+    // a React component may mount more than once (StrictMode double-invokes constructors),
+    // and each extra subscription would advance the belt an extra time per tick.
+    this._lastBeltTickTime = -1;
+    this.onTick.subscribe("SushiSyncBeltAnimate", this.handleBeltTick);
   }
+
+  // -------------------------------------------------------------------
+  //  handleBeltTick - onTick emits ABSOLUTE game time (BaseGameModel does
+  //  `onTick.invoke(this.gameTime_ms)`), NOT a per-frame delta.  Feeding that straight
+  //  into gameThink() made every frame advance the belt by the whole elapsed game, so
+  //  plates tore across the phone and drifted further from the presenter the longer a
+  //  round ran.  Convert to a delta here.
+  // -------------------------------------------------------------------
+  private handleBeltTick = (gameTime_ms: number) => {
+    if (this._lastBeltTickTime < 0) {
+      this._lastBeltTickTime = gameTime_ms;
+      return;
+    }
+    const elapsed_ms = gameTime_ms - this._lastBeltTickTime;
+    this._lastBeltTickTime = gameTime_ms;
+    if (elapsed_ms <= 0) return;
+    this.gameThink(elapsed_ms);
+  };
 
   // -------------------------------------------------------------------
   //  requestGameStateFromPresenter - the client's ONLY state-sync path.  Must fully rebuild

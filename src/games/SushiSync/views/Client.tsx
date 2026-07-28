@@ -104,13 +104,10 @@ class BriefingScreen extends React.Component<{ appModel?: SushiSyncClientModel }
 @inject("appModel")
 @observer
 class GameScreen extends React.Component<{ appModel?: SushiSyncClientModel }> {
-  constructor(props: { appModel?: SushiSyncClientModel }) {
-    super(props);
-    // Drive the local belt extrapolation between the presenter's 400ms pushes.
-    props.appModel!.onTick.subscribe("beltAnimate", (elapsed) =>
-      props.appModel!.gameThink(elapsed),
-    );
-  }
+  // Belt extrapolation is driven by the model's own onTick subscription (see
+  // SushiSyncClientModel.handleBeltTick).  It deliberately does NOT live here: onTick
+  // carries absolute game time rather than a frame delta, and a component constructor
+  // can run more than once, which would compound the error.
 
   private renderBeltZone() {
     const { appModel } = this.props;
