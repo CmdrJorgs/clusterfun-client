@@ -9,9 +9,10 @@ import {
   PresenterGameState,
   GeneralGameState,
   UINormalizer,
+  GameVersionTag,
 } from "libs";
 import PartyPixAssets from "../assets/Assets";
-import { PartyPixVersion } from "../models/GameSettings";
+import { PARTY_PIX_VERSION_HISTORY } from "../models/GameSettings";
 import {
   PartyPixPresenterModel,
   PartyPixGameState,
@@ -109,7 +110,8 @@ class JoinPage extends React.Component<{ appModel?: PartyPixPresenterModel }> {
               Include photos already in the folder
             </label>
             <span className={styles.folderNote}>
-              Saves photos so the slideshow survives a refresh. Optional.
+              Photos are saved here, so the slideshow survives a refresh and the party's pictures
+              are still yours afterwards. <b>Pick a folder to begin.</b>
             </span>
           </>
         );
@@ -308,7 +310,7 @@ class SlideshowPage extends React.Component<
             className={styles.controlButton}
             onClick={() => this.setState({ mode: "thumbs" })}
           >
-            ▦ Thumbnails
+            ▦ Thumbnails: {appModel.photos.length}
           </button>
           <button
             className={classNames(styles.controlButton, {
@@ -433,7 +435,9 @@ export default class Presenter extends React.Component<{
         <div className={styles.frameRoom}>
           Room <b>{appModel.roomId}</b>
         </div>
-        <div className={styles.frameVersion}>v{PartyPixVersion}</div>
+        <div className={styles.frameVersion}>
+          <GameVersionTag title="PartyPix" history={PARTY_PIX_VERSION_HISTORY} showChanges />
+        </div>
       </div>
     );
   }

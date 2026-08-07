@@ -2,9 +2,13 @@ import Logger from "js-logger";
 import { createRoot } from "react-dom/client";
 import { GLOBALS } from "./Globals";
 import { getGameListPromise } from "GameChooser";
-import { GameDescriptor, GameManifestItem } from "games/lists/GameDescriptor";
+import { GameManifestItem, LobbyGame } from "games/lists/GameDescriptor";
+import { fetchPopularity, sortGamesByPopularity } from "games/lists/gamePopularity";
 import { GameInstanceProperties } from "libs/config/GameInstanceProperties";
 import { WebSocketMessageThing } from "libs/messaging/MessageThing";
+import { GameAnalytics } from "libs/telemetry/GameAnalytics";
+import { getDeviceId } from "libs/telemetry/DeviceId";
+import { configureErrorReporter, installGlobalErrorHandlers } from "libs/telemetry/ErrorReporter";
 import "index.css";
 import React from "react";
 
@@ -57,8 +61,15 @@ async function serverCall<T>(url: string, payload: any | undefined) {
   }
 }
 
+// Real analytics run whenever the build asks for them and nothing has opted
+// out.  .env.production sets the flag, so a production build reports for real
+// without anyone having to remember a command-line variable; the Test Lobby
+// (.env.dev) leaves it unset and gets the console-logging mock.
+const useRealTelemetry =
+  !!process.env.REACT_APP_USE_REAL_TELEMETRY && !process.env.REACT_APP_NO_TELEMETRY;
+
 const telemetryFactoryPromise = (async () => {
-  if (process.env.REACT_APP_USE_REAL_TELEMETRY) {
+  if (useRealTelemetry) {
     const realModulePromise = import("./libs/telemetry/TelemetryLogger");
     const googleTrackingIds = (await import("./secrets")).googleTrackingIds;
     const TelemetryLoggerFactory = (await realModulePromise).TelemetryLoggerFactory;
@@ -71,6 +82,26 @@ const telemetryFactoryPromise = (async () => {
 })();
 
 const getStoragePromise = (async () => (await import("./libs/storage/StorageHelper")).getStorage)();
+
+// Crash reporting, armed as early as we can.
+//
+// An error boundary only sees errors thrown while rendering.  Everything else - a throw from
+// an event handler or a timer, a promise nobody awaited, anything that happens before the
+// first game model exists - reaches nobody at all without these two listeners.  Installed
+// synchronously so a failure during startup is still caught; the analytics channel is
+// attached a moment later, and reportError holds nothing until it arrives.
+installGlobalErrorHandlers();
+(async () => {
+  const factory = await telemetryFactoryPromise;
+  const getStorage = await getStoragePromise;
+  configureErrorReporter(
+    new GameAnalytics(factory.getLogger("Lobby"), {
+      game: "Lobby",
+      deviceId: getDeviceId(getStorage("clusterfun")),
+      entity: "lobby",
+    }),
+  );
+})();
 
 // Get the google analitics measurement ID from :  https://analytics.google.com/analytics/web/#/a169765098p268496630/admin/streams/table/2416371752
 
@@ -98,11 +129,9 @@ if (quickTest) {
 
     const gameTestModel = new GameTestModel(4, getStorage("clusterfun_test"), factory);
 
-    const games: GameDescriptor[] = gameList.map((g) => {
-      const item = { ...g };
-      item.tags = [];
-      return item;
-    });
+    // No server manifest outside production, so nothing is badged and
+    // every game the build knows about is visible.
+    const games: LobbyGame[] = gameList.map((g) => ({ ...g, tags: [] }));
 
     root.render(<GameTestComponent gameTestModel={gameTestModel} games={games} />);
   })();
@@ -166,24 +195,30 @@ else {
     }
 
     const allGames = await getGameListPromise();
+    // What people actually play decides the order of the lobby.  Fetched
+    // alongside the manifest; if it is unavailable the registry order stands.
+    const popularity = await fetchPopularity();
     const gameList = gamesFromServerManifest
       .map((serverItem) => {
         const foundGame = allGames.find(
           (g) => g.name.toLowerCase() === serverItem.name.toLowerCase(),
         );
         if (foundGame) {
-          const addMe = { ...foundGame };
+          // The manifest is the authority: it decides the label the lobby
+          // shows, and may override the client's display name.
+          const addMe: LobbyGame = { ...foundGame, tags: serverItem.tags };
           if (serverItem.displayName) addMe.displayName = serverItem.displayName;
-          addMe.tags = serverItem.tags;
           return addMe;
         } else {
           Logger.warn(`Server specified a game I don't know about: ${serverItem.name}`);
           return undefined;
         }
       })
-      .filter((i) => i !== undefined) as GameDescriptor[];
+      .filter((i) => i !== undefined) as LobbyGame[];
 
-    root.render(<LobbyMainPage lobbyModel={lobbyModel} games={gameList} />);
+    root.render(
+      <LobbyMainPage lobbyModel={lobbyModel} games={sortGamesByPopularity(gameList, popularity)} />,
+    );
   })();
   root.render(<div>Loading stuff....</div>);
 }

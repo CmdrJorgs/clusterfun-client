@@ -1,0 +1,558 @@
+.gamepresenter {
+  width: 100%;
+  height: 100%;
+  background-color: rgb(43, 65, 98);
+  color: #eeeeee;
+  overflow: hidden;
+  font-size: 32px;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.gamepresenter button {
+  font-size: 100%;
+  padding: 5px 15px;
+}
+
+.gamepresenter .divRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.gamepresenter .nameBox {
+  padding: 10px 20px;
+}
+
+.gamepresenter .roomCode {
+  margin-right: 50px;
+}
+
+.gamepresenter .presenterButton {
+  font-size: 120%;
+  margin-top: 20px;
+}
+
+.gamepresenter .instructions {
+  background: #1b2a42;
+  border: 1px solid #4d648a;
+  border-radius: 10px;
+  padding: 6px 20px;
+  font-size: 75%;
+  margin: 12px 0;
+}
+
+.gamepresenter .instructions ul {
+  margin: 8px 0;
+}
+
+.gamepresenter .roundHeader {
+  font-size: 90%;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+/* ---- The wall of boards ---- */
+
+/* A grid rather than a row: the column count is chosen in code to fit every
+   board on screen at the biggest size that works (see planBoardLayout), and
+   the whole thing is centred so the spacing reads as even edge to edge. */
+.gamepresenter .boardsRow {
+  display: grid;
+  justify-content: center;
+  align-content: start;
+  justify-items: center;
+  overflow: hidden;
+}
+
+/* Each player gets their own framed panel, tinted with their avatar colour
+   (set inline from the player), so a row of six boards reads as six PEOPLE
+   rather than as one wall of tetris. */
+.gamepresenter .boardPanel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 10px 8px 10px;
+  border: 3px solid var(--playerAccent, #4d648a);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(20, 32, 52, 0.85), rgba(10, 17, 30, 0.9));
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.5),
+    0 8px 22px -10px rgba(0, 0, 0, 0.9);
+}
+/* A dead board recedes rather than shouting for attention */
+.gamepresenter .boardPanelOut {
+  opacity: 0.55;
+  border-color: #3a4459;
+}
+
+.gamepresenter .boardLabel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 55%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gamepresenter .boardHolder {
+  position: relative;
+}
+
+.gamepresenter .targetNote {
+  color: #ff9090;
+  font-size: 80%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gamepresenter .toppedOut {
+  position: absolute;
+  top: 45%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-18deg);
+  font-size: 55%;
+  font-weight: 900;
+  color: #ff9090;
+  text-shadow: 0 0 8px #000;
+  white-space: nowrap;
+}
+
+.gamepresenter .boardScore {
+  font-size: 50%;
+  color: #b8c4d8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gamepresenter .winnerPanel {
+  outline: 4px solid #48e148;
+  outline-offset: 4px;
+  border-radius: 6px;
+  animation: winnerPulse 1s ease-in-out infinite alternate;
+}
+
+@keyframes winnerPulse {
+  from {
+    background: rgba(72, 225, 72, 0.05);
+  }
+  to {
+    background: rgba(72, 225, 72, 0.25);
+  }
+}
+
+.gamepresenter .winnerBanner {
+  font-size: 140%;
+  font-weight: 700;
+  padding: 10px 0 20px 0;
+}
+
+/* Marked blocks pulse so a special is easy to spot (see BoardGrid) */
+:global {
+  @keyframes eittrisSpecialPulse {
+    0% {
+      filter: brightness(1);
+    }
+    50% {
+      filter: brightness(1.9);
+    }
+    100% {
+      filter: brightness(1);
+    }
+  }
+}
+
+/* ---- Robot player picker (gathering screen) ---- */
+.robotPicker {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 18px;
+}
+.robotLabel {
+  font-weight: 600;
+}
+.robotButton {
+  min-width: 56px;
+  font-size: 90%;
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 3px solid #4d648a;
+  background: #1b2a42;
+  color: #e8f0fa;
+  cursor: pointer;
+}
+.robotButtonOn {
+  border-color: #48e148;
+  background: #1d6b3a;
+}
+.robotNames {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+/* ---- Gathering screen: setup on the left, a robot playing on the right ---- */
+.gatheringLayout {
+  display: flex;
+  align-items: flex-start;
+  gap: 32px;
+}
+.gatheringMain {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.demoColumn {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 8px;
+}
+
+/* ---- Game setup ---- */
+.setupPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 18px;
+  padding: 16px 18px;
+  border: 3px solid #4d648a;
+  border-radius: 14px;
+  background: rgba(13, 22, 38, 0.6);
+}
+.setupRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.setupLabel {
+  font-weight: 600;
+  min-width: 260px;
+}
+.setupSelect {
+  font-size: 85%;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 3px solid #4d648a;
+  background: #1b2a42;
+  color: #e8f0fa;
+}
+.specialChecks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  flex: 1 1 60%;
+}
+.specialCheck {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 80%;
+  cursor: pointer;
+}
+
+/* Twice the size the browser gives them.  This list is read and clicked from across a
+   room, by somebody standing at the shared screen, not from a desk chair. */
+.specialCheck input[type="checkbox"] {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  margin: 0;
+  accent-color: #48e148;
+  cursor: pointer;
+}
+.specialCheckIcon {
+  display: inline-block;
+  width: 32px;
+  height: 32px;
+  background-repeat: no-repeat;
+  flex: 0 0 auto;
+}
+
+/* ---- Gathering screen furniture ---- */
+
+/* Dmitri, bottom-left.  He is decoration, so he never takes pointer events,
+   and the setup panel is shaped to flow around his shoulder. */
+/* He stands in a gutter of his own (see .lowerSetup), so the controls sit
+   beside him rather than on top of him. */
+.dmitri {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 300px;
+  height: auto;
+  pointer-events: none;
+  user-select: none;
+  z-index: 2;
+  /* Fades into the background rather than ending on a hard edge */
+  -webkit-mask-image: linear-gradient(to top, transparent 0%, black 12%);
+  mask-image: linear-gradient(to top, transparent 0%, black 12%);
+}
+.gatheringLayout {
+  position: relative;
+}
+
+/* The lower half of the page steps aside for him */
+.lowerSetup {
+  position: relative;
+  z-index: 3;
+  margin-left: 320px;
+}
+.setupPanel {
+  position: relative;
+  z-index: 3;
+}
+
+/* ---- The robot demo, framed ---- */
+.demoFrame {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 18px 14px 18px;
+  border: 4px solid #4d648a;
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(13, 22, 38, 0.9), rgba(8, 14, 26, 0.9));
+  box-shadow: 0 10px 30px -12px rgba(0, 0, 0, 0.8);
+}
+.demoTitle {
+  font-size: 55%;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #9fb2cc;
+}
+/* Centred against the setup column beside it */
+.demoColumn {
+  align-self: center;
+  justify-content: center;
+}
+
+/* ---- Powerup checkboxes, in aligned columns ---- */
+.specialChecks {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(240px, 1fr));
+  gap: 8px 24px;
+  flex: 1 1 100%;
+}
+.specialCheck {
+  /* Icon and label line up down each column because every row is the same
+     grid, rather than wrapping wherever the text happens to end. */
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: center;
+  gap: 8px;
+}
+
+/* The demo caption changes as powerups land.  A fixed width and room for two
+   lines means a longer powerup name wraps instead of resizing the whole box,
+   which would make the demo jump every few seconds. */
+.demoCaption {
+  display: block;
+  width: 200px;
+  min-height: 2.6em;
+  text-align: center;
+  font-size: 45%;
+  line-height: 1.3;
+  opacity: 0.75;
+  overflow-wrap: break-word;
+}
+.demoFrame {
+  width: 236px;
+  box-sizing: border-box;
+}
+
+/* ---- Joined players: a fixed area, so the page does not jump ---- */
+.playerArea {
+  /* Reserved whether or not anybody has joined yet.  Without this the whole
+     setup panel below shifts down the moment the first player appears. */
+  min-height: 150px;
+  margin-top: 6px;
+}
+.playerAreaEmpty {
+  display: flex;
+  align-items: center;
+  opacity: 0.7;
+}
+
+/* Each player in their own frame, so a row of them reads as separate people
+   rather than as one run of text. */
+.nameBox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px 8px 10px;
+  border: 3px solid #4d648a;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(45, 66, 101, 0.9), rgba(27, 42, 66, 0.9));
+  box-shadow: 0 4px 14px -6px rgba(0, 0, 0, 0.9);
+  font-weight: 600;
+}
+
+/* ================================================================
+   Gathering page layout
+   The page was running off the bottom of the screen, so it is now a
+   full-height column: the join banner at the top, the setup in the
+   middle, and the title + start button anchored low over Dmitri.
+   ================================================================ */
+.gatheringLayout {
+  height: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+.gatheringMain {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+/* The one thing a player in the room actually needs to read */
+.joinBanner {
+  font-size: 80%;
+  padding: 6px 0 10px 0;
+}
+.joinCode {
+  letter-spacing: 0.12em;
+  color: #9fe8ff;
+}
+
+.playerAreaTitle {
+  font-weight: 600;
+  margin: 0 0 6px 0;
+}
+
+/* Title and start button in the bottom-left corner, around the portrait.
+   Dmitri is 58% of the page tall and anchored to the bottom, so the title is
+   parked just above that line - above his head, not across his face. */
+.cornerStack {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  top: 0;
+  z-index: 4;
+  width: 300px;
+  pointer-events: none;
+}
+.cornerTitle {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 59%;
+  margin: 0 0 10px 0;
+  text-align: center;
+  text-shadow: 0 3px 10px rgba(0, 0, 0, 0.9);
+}
+/* Sits low over his portrait, which is where the eye ends up anyway */
+.startOverPortrait {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 28px;
+  white-space: nowrap;
+  pointer-events: auto;
+  margin: 0;
+  box-shadow: 0 8px 26px -6px rgba(0, 0, 0, 0.9);
+}
+
+/* A second label on the same row needs a little air, not a fixed column */
+.setupLabelInline {
+  min-width: 0;
+  margin-left: 22px;
+}
+
+/* Dmitri is anchored to the bottom of the page rather than to the content */
+.dmitri {
+  height: 58%;
+  width: auto;
+  max-width: 300px;
+  object-fit: contain;
+  object-position: bottom left;
+}
+
+/* ---- The audio bar ---- */
+
+/* A strip pinned along the bottom of the shared screen, present in every game
+   state.  Volume is the one thing somebody in the room asks for out loud, so it
+   is always reachable rather than tucked behind a menu.  Its height is baked
+   into BOARDS_AREA_HEIGHT - change one and change the other. */
+.gamepresenter .audioBar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 56px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 26px;
+  padding: 0 24px;
+  background: rgba(19, 30, 48, 0.92);
+  border-top: 1px solid #4d648a;
+  font-size: 22px;
+}
+
+.gamepresenter .audioControl {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.gamepresenter .audioLabel {
+  color: #b9c9e4;
+  letter-spacing: 0.5px;
+}
+
+.gamepresenter .audioSlider {
+  width: 220px;
+  accent-color: #7fb2ff;
+  cursor: pointer;
+}
+
+/* Fixed width, tabular figures: without it the whole row shuffles sideways as
+   the number goes 5% -> 100% while you are dragging. */
+.gamepresenter .audioValue {
+  width: 62px;
+  color: #eeeeee;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.gamepresenter .audioNext {
+  font-size: 20px;
+  padding: 6px 16px;
+}
+
+.gamepresenter .audioNext:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* The song title can be anything anyone named a file, so it gets whatever room
+   is left and an ellipsis rather than being allowed to push the controls off. */
+.gamepresenter .audioTrack {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #9fb4d4;
+  font-size: 20px;
+  font-style: italic;
+}
+
+/* Speed is a word, not a digit, so it needs more room than the number buttons
+   it sits beside - and a fixed width so the row does not shuffle as the
+   selection moves between "slow" and "medium". */
+.gamepresenter .speedButton {
+  width: 130px;
+  text-transform: capitalize;
+}

@@ -1,0 +1,82 @@
+import { GameVersionEntry, currentVersion } from "libs";
+
+// Version + change history. The version IS the newest entry here, so the two cannot drift
+// and no version can be bumped without saying what changed - see libs/config/GameVersion.ts.
+export const EITTRIS_VERSION_HISTORY: GameVersionEntry[] = [
+  {
+    version: "0.1.0",
+    changes: [
+      "First tracked version - the numbering starts over here, on top of ClusterFun 0.5.0.",
+      "Versus tetris for up to 16 players, each phone playing its own board on the shared screen.",
+      "Keyboard and controller support, with hold-to-repeat tuned per action.",
+      "Computer players take over a seat when somebody drops, and hand it back when they return.",
+    ],
+  },
+];
+export const EittrisVersion = currentVersion(EITTRIS_VERSION_HISTORY);
+
+// Game-wide tuning constants.  Board/rule constants live in eittrisLogic.ts.
+
+// Gesture classification on the phone (see Client.tsx)
+export const FLICK_MAX_DURATION_MS = 300; // faster than this + far enough = a flick
+export const FLICK_MIN_DISTANCE_PX = 40; // shorter than this is a drag/tap, not a flick
+export const DRAG_ACTIVATION_PX = 12; // movement needed before drag commands start
+export const TAP_MAX_DURATION_MS = 250; // down->up faster than this ...
+export const TAP_MAX_DISTANCE_PX = 10; // ... with less movement than this = tap (rotate)
+// After a flick fires, this many pointer-move events must land on the board
+// before another flick is allowed.  A real second flick easily clears it;
+// a phantom repeat (e.g. a flick that ended off-screen) never does.
+export const FLICK_REARM_MOVES = 3;
+
+// Presenter simulation
+// Quiet gap between a piece locking and the next one appearing.  Nothing is
+// falling during it, so a gesture that outlives its piece has nothing to act
+// on - the structural cure for input leaking onto the next piece.
+export const SPAWN_DELAY_MS = 200;
+export const THUMBNAIL_INTERVAL_MS = 1000; // how often changed boards broadcast thumbnails
+// The settled grid is the biggest field on the wire (210 chars).  It goes out only when
+// it changes, and never more than this often - a burst of grid churn (a jumble, a wall
+// landing) is not worth ten copies of the board.  A change that arrives during the
+// cooldown is held and sent the moment it expires, so nothing is ever dropped.
+export const GRID_MIN_INTERVAL_MS = 1000;
+
+// How often a phone tells the host about its own board.  The phone plays at full speed
+// regardless - this is only the reporting rate - so the cost of a slower number is that the
+// shared screen shows a piece stepping four times a second rather than gliding, not that
+// anybody's game feels heavy.
+export const REPORT_INTERVAL_MS = 250;
+
+// How long the "so-and-so hit you" banner stays up when there is nothing to outlive it -
+// a wall, a jumble, or a hit a shield ate.  A banner about a lasting affliction ignores
+// this and goes when the affliction does.
+export const BANNER_MS = 3000;
+// ...with a backstop, in case the affliction it is waiting on never arrives at all
+export const BANNER_MAX_MS = 30000;
+
+// How full a robot's board has to be before it will spend an earthquake.  Below this an
+// earthquake buys a couple of rows; at this point it buys the game.
+export const AI_QUAKE_FILL = 0.5;
+
+// Computer player: one move (rotate or a single sideways step) twice a second
+export const AI_MOVE_INTERVAL_MS = 500;
+// How much quicker the computer players think while dev "Go fast" is on.  The
+// game clock speeds up in fast mode, but the bot's own move timer is in real
+// milliseconds, so without this it keeps thinking at its normal pace while
+// everything else races - and every bot board tops out.
+export const AI_FAST_MULTIPLIER = 10;
+
+// A brand new player may still join this long after the game started - a slow
+// phone or a fumbled code should not cost somebody the whole round.  Players
+// who are REJOINING are always let back in, however long it has been.
+export const LATE_JOIN_GRACE_MS = 15000;
+
+// ------------------------------------------------------------------------------------------
+// Vibration, not sound.  The shared screen has the speakers; a phone buzzing in a pocket is
+// what tells its owner something happened to THEM.  Patterns are milliseconds on/off, and
+// the two that matter most - clearing four rows, and being attacked - are the two you can
+// feel through a table.
+// ------------------------------------------------------------------------------------------
+export const VIBRATE_CLEAR = [25];
+export const VIBRATE_BIG_CLEAR = [60, 40, 60, 40, 120];
+export const VIBRATE_ATTACKED = [90, 50, 90];
+export const VIBRATE_SHIELDED = [20, 40, 20];

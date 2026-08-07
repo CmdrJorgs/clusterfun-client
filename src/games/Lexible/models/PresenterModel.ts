@@ -4,12 +4,16 @@ import { PLAYTIME_MS } from "./GameSettings";
 import { LetterBlockModel } from "./LetterBlockModel";
 import { WordTree } from "./WordTree";
 import { LetterGridModel } from "./LetterGridModel";
+import { TEAM_HOME_SCORE, applyHomeConnections, hasCrossedBoard, homeCells } from "./teamAreas";
+import { DEFAULT_GRID_HEIGHT, gridWidthForHeight, sanitizeGridHeight } from "./gridLayout";
+import { findWordsFrom } from "./wordSearch";
 import {
   ClusterFunPlayer,
   ISessionHelper,
   ClusterFunGameProps,
   Vector2,
   ClusterfunPresenterModel,
+  ReconnectInfo,
   ITelemetryLogger,
   IStorage,
   GeneralGameState,
@@ -18,7 +22,8 @@ import {
   ITypeHelper,
 } from "libs";
 import Logger from "js-logger";
-import { findHotPathInGrid, LetterGridPath } from "./LetterGridPath";
+import type { SpeechEngineId } from "libs/Media/speech";
+import { DEFAULT_SPEECH_ENGINE, isSpeechEngineId } from "libs/Media/speech";
 import {
   LetterChain,
   LexibleBoardUpdateEndpoint,
@@ -44,6 +49,12 @@ import { GameOverEndpoint, InvalidateStateEndpoint } from "libs/messaging/basicE
 
 const LEXIBLE_SETTINGS_KEY = "lexible_settings";
 const SEND_RECENT_LETTERS_INTERVAL_MS = 200;
+/**
+ * How long an accepted submission is remembered so a resend of it is ignored.  Comfortably
+ * longer than the endpoint's 2s retry interval, and short enough that a player who genuinely
+ * plays the same letters again later is not blocked.
+ */
+const SUBMISSION_MEMORY_MS = 15000;
 
 export enum LexiblePlayerStatus {
   Unknown = "Unknown",
@@ -75,21 +86,20 @@ export enum LexibleGameState {
 export enum LexibleGameEvent {
   ResponseReceived = "ResponseReceived",
   WordAccepted = "WordAccepted",
+  /** Tiles actually changed hands. Carries how many. The view makes the noise. */
+  TilesCaptured = "TilesCaptured",
   TeamWon = "TeamWon",
 }
 
 //--------------------------------------------------------------------------------------
 //
 //--------------------------------------------------------------------------------------
-export enum MapSize {
-  Small = "Small",
-  Medium = "Medium",
-  Large = "Large",
-}
-
 interface LexibleSettings {
-  mapSize: MapSize;
+  /** Rows the host asked for; the column count is derived from it. */
+  gridHeight: number;
   startFromTeamArea: boolean;
+  /** Which text-to-speech engine reads the words out. */
+  speechEngine: SpeechEngineId;
 }
 
 // -------------------------------------------------------------------
@@ -135,7 +145,12 @@ export const getLexiblePresenterTypeHelper = (
     shouldStringify(typeName: string, propertyName: string, object: any): boolean {
       switch (propertyName) {
         case "__blockid":
-        case "failFade":
+        // Transient animation state.  The names must be the PRIVATE fields: the
+        // serializer walks real properties, so "failFade" (the getter) never
+        // matched and a checkpoint taken mid-flash restored a tile stuck red
+        // with no animator left running to clear it.
+        case "_failFade":
+        case "_captureSeq":
         case "wordTree":
         case "wordSet":
           return false;
@@ -181,15 +196,40 @@ export class LexiblePresenterModel extends ClusterfunPresenterModel<LexiblePlaye
     })();
   }
 
-  @observable private _mapSize = MapSize.Medium;
-  get mapSize() {
-    return this._mapSize;
+  // How many rows the host wants.  The tile size and the column count both fall
+  // out of this and the size of the play area - see gridLayout.ts.  It replaces
+  // the old Small/Medium/Large setting, which set a width from a player-count
+  // guess and left the board not quite filling the screen at most sizes.
+  @observable private _gridHeight = DEFAULT_GRID_HEIGHT;
+  get gridHeight() {
+    return this._gridHeight;
   }
-  set mapSize(value) {
+  set gridHeight(value) {
     action(() => {
-      this._mapSize = value;
+      this._gridHeight = sanitizeGridHeight(value);
       this.saveSettings();
     })();
+  }
+
+  // Which engine reads the words out.  A host setting rather than a build-time choice: the
+  // right answer depends on the machine driving the screen, and the only way to find out is
+  // to try one.  Everything about an engine - including whether anything is downloaded at
+  // all - lives behind ISpeechEngine, so switching here costs nothing for the ones not
+  // chosen.  See libs/Media/speech.
+  @observable private _speechEngine: SpeechEngineId = DEFAULT_SPEECH_ENGINE;
+  get speechEngine() {
+    return this._speechEngine;
+  }
+  set speechEngine(value) {
+    action(() => {
+      this._speechEngine = isSpeechEngineId(value) ? value : DEFAULT_SPEECH_ENGINE;
+      this.saveSettings();
+    })();
+  }
+
+  /** The columns that fit beside that many rows. Derived, never stored. */
+  get gridWidth() {
+    return gridWidthForHeight(this._gridHeight);
   }
 
   get gameTimeMinutes() {
@@ -279,8 +319,13 @@ export class LexiblePresenterModel extends ClusterfunPresenterModel<LexiblePlaye
     const savedSettingsValue = storage.get(LEXIBLE_SETTINGS_KEY);
     if (savedSettingsValue) {
       const savedSettings = JSON.parse(savedSettingsValue) as LexibleSettings;
-      this.mapSize = savedSettings.mapSize ?? MapSize.Medium;
+      this.gridHeight = savedSettings.gridHeight ?? DEFAULT_GRID_HEIGHT;
       this.startFromTeamArea = savedSettings.startFromTeamArea ?? true;
+      // Anything we no longer recognise falls back to the default rather than leaving the
+      // presenter asking for an engine that does not exist.
+      this.speechEngine = isSpeechEngineId(savedSettings.speechEngine)
+        ? savedSettings.speechEngine
+        : DEFAULT_SPEECH_ENGINE;
     }
 
     makeObservable(this);
@@ -307,6 +352,23 @@ export class LexiblePresenterModel extends ClusterfunPresenterModel<LexiblePlaye
     this.theGrid.processBlocks((block) => {
       this.setBlockHandlers(block);
     });
+    // Derived from the board, not saved with it - recompute rather than trust
+    // whatever a checkpoint happened to carry.
+    this.updateHomeConnections();
+  }
+
+  // -------------------------------------------------------------------
+  //  updateHomeConnections - mark which tiles are actually joined to their
+  //  own team's starting area, and which sides of that region face out.
+  //
+  //  Cheap (one flood fill per team over the grid) and only run when the
+  //  board changes, so it is not worth memoising further.
+  //
+  //  Returns the two regions, because checkForWin wants exactly this and there
+  //  is no reason to walk the board twice.
+  // -------------------------------------------------------------------
+  updateHomeConnections(): Record<string, Set<string>> {
+    return applyHomeConnections(this.theGrid);
   }
 
   //--------------------------------------------------------------------------------------
@@ -314,8 +376,9 @@ export class LexiblePresenterModel extends ClusterfunPresenterModel<LexiblePlaye
   //--------------------------------------------------------------------------------------
   saveSettings() {
     const savedSettings: LexibleSettings = {
-      mapSize: this.mapSize,
+      gridHeight: this.gridHeight,
       startFromTeamArea: this.startFromTeamArea,
+      speechEngine: this.speechEngine,
     };
     this.storage.set(LEXIBLE_SETTINGS_KEY, JSON.stringify(savedSettings, null, 2));
   }
@@ -325,11 +388,17 @@ export class LexiblePresenterModel extends ClusterfunPresenterModel<LexiblePlaye
   //                    word list
   // -------------------------------------------------------------------
   private async populateWordSet() {
-    const wordListPromise = import("../assets/words/Collins_Scrabble_2019");
+    // Both are presenter-only and both are lazy: a phone never downloads a
+    // dictionary.  The word list is a compressed asset fetched at runtime
+    // rather than a source module - see assets/words/wordList.ts.
+    const wordListPromise = import("../assets/words/wordList").then((m) => m.loadWordList());
     const badWordsPromise = import("../assets/words/badwords");
 
-    const { wordList } = await wordListPromise;
+    const wordList = await wordListPromise;
     let lastAwaitTime = window.performance.now();
+    // Drop blanks.  The list is a text file and ends with a newline, so a plain
+    // split leaves a trailing "" that would go into both the set and the trie -
+    // an empty-string node in the tree and a word count one too high.
     const words = wordList.split("\n");
     this.wordTree = new WordTree("", undefined);
     for (const word of words) {
@@ -338,8 +407,10 @@ export class LexiblePresenterModel extends ClusterfunPresenterModel<LexiblePlaye
         if (this.isShutdown) return;
         lastAwaitTime = window.performance.now();
       }
-      this.wordTree.add(word.trim());
-      this.wordSet.add(word.trim());
+      const trimmed = word.trim();
+      if (!trimmed) continue;
+      this.wordTree.add(trimmed);
+      this.wordSet.add(trimmed);
     }
     Logger.info(`Loaded ${this.wordSet.size} words`);
 
@@ -351,7 +422,11 @@ export class LexiblePresenterModel extends ClusterfunPresenterModel<LexiblePlaye
         if (this.isShutdown) return;
         lastAwaitTime = window.performance.now();
       }
-      this.badWords.add(badWord.trim());
+      const trimmed = badWord.trim();
+      // Same reason as above - and an empty entry in the censor list would be
+      // far worse than a miscount, since it matches everything it is tested on.
+      if (!trimmed) continue;
+      this.badWords.add(trimmed);
     }
     Logger.info(`Loaded ${this.badWords.size} censored words`);
   }
@@ -371,6 +446,15 @@ export class LexiblePresenterModel extends ClusterfunPresenterModel<LexiblePlaye
       else {
         player.teamName = "AB"[Date.now() % 2];
       }
+      // Write it down NOW.  Without this the checkpoint still holds the "X"
+      // default, and a presenter refresh brings the player back teamless: they
+      // vanish from both rosters and every word they submit is rejected,
+      // because handleSubmitWord substitutes '#' for a tile whose team does not
+      // match theirs.  They look fine on their own phone the whole time.
+      //
+      // A returning player takes the onPlayerReturned path rather than this
+      // one, so nothing else would ever re-assign it.
+      this.saveCheckpoint();
     }
 
     Logger.debug(`Joined game state: ${this.gameState}`);
@@ -402,6 +486,35 @@ export class LexiblePresenterModel extends ClusterfunPresenterModel<LexiblePlaye
   }
 
   // -------------------------------------------------------------------
+  //  onPlayerReturned - their team and their tiles are still theirs.
+  //
+  //  Team membership is filtered by player id, and player ids are stable
+  //  across a reconnect, so a returning player comes back to the same team
+  //  with the same board.  The phone re-onboards on join and is sent the
+  //  whole grid, so there is nothing to push at it here.
+  // -------------------------------------------------------------------
+  protected onPlayerReturned(_player: LexiblePlayer, _info: ReconnectInfo) {}
+
+  // -------------------------------------------------------------------
+  //  onPlayerDisconnected - drop the letters they had part-selected.
+  //
+  //  A half-spelled word is the one bit of per-player state that lives on
+  //  the shared board rather than on the phone, so a dropped player would
+  //  otherwise leave letters glowing as theirs for the rest of the round
+  //  with nobody behind them.  Everything that matters - team, tiles,
+  //  score - is keyed by their stable id and stays exactly where it is.
+  // -------------------------------------------------------------------
+  protected onPlayerDisconnected(player: LexiblePlayer) {
+    action(() => {
+      this.theGrid.processBlocks((block) => {
+        if (block.isSelectedByPlayer(player.playerId)) {
+          block.selectForPlayer(player.playerId, false);
+        }
+      });
+    })();
+  }
+
+  // -------------------------------------------------------------------
   //
   // -------------------------------------------------------------------
   prepareFreshGame = () => {
@@ -414,22 +527,9 @@ export class LexiblePresenterModel extends ClusterfunPresenterModel<LexiblePlaye
   //  prepareFreshRound - called automatically before every round
   // -------------------------------------------------------------------
   prepareFreshRound = () => {
-    const boardRatio = 34 / 24;
-
-    let boardWidth = 20 + 2 * this.players.length;
-    switch (this.mapSize) {
-      case MapSize.Small:
-        boardWidth *= 0.6;
-        break;
-      case MapSize.Large:
-        boardWidth *= 1.5;
-        break;
-    }
-
-    const newGrid = new LetterGridModel(
-      Math.floor(boardWidth),
-      Math.floor(boardWidth / boardRatio),
-    );
+    // One number from the host - the row count - and the columns follow from
+    // how many tiles of that size fit across the play area.
+    const newGrid = new LetterGridModel(this.gridWidth, this.gridHeight);
 
     const letterCount = newGrid.width * newGrid.height + 20;
     const letterDeck: string[] = [];
@@ -452,9 +552,14 @@ export class LexiblePresenterModel extends ClusterfunPresenterModel<LexiblePlaye
 
     newGrid.populate(letterDeck.map((l) => `${l}_0`).join(""));
     if (this.startFromTeamArea) {
-      for (let y = 0; y < newGrid.height; y++) {
-        newGrid.getBlock(new Vector2(0, y))!.setScore(4, "A");
-        newGrid.getBlock(new Vector2(newGrid.width - 1, y))!.setScore(4, "B");
+      // Both teams start on the left and both run for the right edge, so
+      // neither is handed the easier half of an asymmetric board.  The exact
+      // cells - and why they interleave rather than collide - are in
+      // teamAreas.ts, which the win search and the board border also read.
+      for (const team of ["A", "B"]) {
+        for (const cell of homeCells(newGrid, team)) {
+          newGrid.getBlock(cell)!.setScore(TEAM_HOME_SCORE, team);
+        }
       }
     }
     newGrid.processBlocks((block) => {
@@ -463,6 +568,7 @@ export class LexiblePresenterModel extends ClusterfunPresenterModel<LexiblePlaye
 
     // done!
     this.theGrid = newGrid;
+    this.updateHomeConnections();
     this.saveCheckpoint();
   };
 
@@ -537,89 +643,39 @@ export class LexiblePresenterModel extends ClusterfunPresenterModel<LexiblePlaye
   };
 
   // -------------------------------------------------------------------
-  //  findWords
+  //  findWords - every word spellable from this letter.
+  //
+  //  The search itself is pure and lives in wordSearch.ts, where it can be
+  //  tested against the board without standing a whole presenter up.
   // -------------------------------------------------------------------
   findWords(startBlock: LetterBlockModel) {
-    const selectedBlocks = new Set<number>();
-
-    const findHere = (block: LetterBlockModel, parentSpot: WordTree): string[] => {
-      const output: string[] = [];
-      // ignore blocks off the board or seleced block
-      if (selectedBlocks.has(block.__blockid)) return output;
-
-      let wordSpot: WordTree | undefined = parentSpot;
-      for (let i = 0; i < block.letter.length; i++) {
-        wordSpot = wordSpot?.branch(block.letter[i].toUpperCase());
-      }
-      if (!wordSpot) return output;
-
-      const word = wordSpot.myWord;
-
-      if (word && word.length >= 3) {
-        output.push(word);
-      }
-
-      selectedBlocks.add(block.__blockid);
-
-      for (let x = -1; x <= 1; x++) {
-        for (let y = -1; y <= 1; y++) {
-          const neighborSpot = new Vector2(x, y).add(block.coordinates);
-          const neighborBlock = this.theGrid.getBlock(neighborSpot);
-          if (neighborBlock) {
-            output.push(...findHere(neighborBlock, wordSpot));
-          }
-        }
-      }
-      selectedBlocks.delete(block.__blockid);
-      return output;
-    };
-
-    const words = findHere(startBlock, this.wordTree);
-    const returnMe: string[] = [];
-    words.forEach((w) => {
-      if (!returnMe.find((item) => item === w) && !this.badWords.has(w)) {
-        returnMe.push(w);
-      }
-    });
-    returnMe.sort();
-    returnMe.sort((a, b) => b.length - a.length);
-    return returnMe;
+    return findWordsFrom(this.theGrid, startBlock, this.wordTree, this.badWords);
   }
 
   // -------------------------------------------------------------------
-  //  checkForWin - a win is when there is a contiguous line of blocks
-  //                from one side to the other for a single team.
-  //                Blocks are not continguous through corners.
+  //  checkForWin - a win is when a team's tiles form a contiguous chain from
+  //                the left edge to the right one.  Four-way: blocks are not
+  //                contiguous through corners.
+  //
+  //  This is the outline the board is already drawing.  A team has crossed when
+  //  the region joined to the left edge reaches the goal column, so the check is
+  //  a lookup on a fill we just did rather than a search of its own.
+  //
+  //  It used to be an A* "hot path" - the cheapest crossing, counting enemy and
+  //  neutral squares - which was a different question that happened to give the
+  //  same answer, at a much higher price.  It also painted the path it found one
+  //  tile per 50ms, and since that path runs through UNCLAIMED and ENEMY tiles it
+  //  read as a white wave sweeping over squares that had nothing to do with
+  //  anybody's territory.  On a wide board the loop was bounded at width*4 steps,
+  //  so a single word could hold the board glowing for ten seconds - and a second
+  //  word landing meanwhile re-entered the whole thing.
   // -------------------------------------------------------------------
-  async checkForWin() {
-    this.theGrid.processBlocks((b) => {
-      b.onPath = false;
-    });
-    await this.waitForRealTime(0); // allow mobx to clear animations
-    const paths: Record<"A" | "B", LetterGridPath> = {
-      A: findHotPathInGrid(this.theGrid, "A"),
-      B: findHotPathInGrid(this.theGrid, "B"),
-    };
-    let pathsToDraw: Array<"A" | "B"> = ["A", "B"];
-    for (const team of ["A", "B"] as Array<"A" | "B">) {
-      const path = paths[team];
-      if (path.cost.enemy === 0 && path.cost.neutral === 0) {
+  checkForWin(connected?: Record<string, Set<string>>) {
+    const regions = connected ?? this.updateHomeConnections();
+    for (const team of ["A", "B"]) {
+      if (hasCrossedBoard(this.theGrid, team, regions[team])) {
         this.handleGameWin(team);
-        pathsToDraw = [team];
-      }
-    }
-    for (let i = 0; i < this.theGrid.width * 4; i++) {
-      let paintedOne = false;
-      for (const team of pathsToDraw) {
-        if (paths[team].nodes.length > i) {
-          paintedOne = true;
-          this.theGrid.getBlock(paths[team].nodes[i])!.onPath = true;
-        }
-      }
-      if (!paintedOne) {
-        break;
-      } else {
-        await this.waitForRealTime(50);
+        return;
       }
     }
   }
@@ -651,6 +707,7 @@ export class LexiblePresenterModel extends ClusterfunPresenterModel<LexiblePlaye
   // -------------------------------------------------------------------
   placeSuccessfulWord(data: LexibleWordSubmissionRequest, word: string, player: LexiblePlayer) {
     const placedLetters: LetterChain = [];
+    let capturedCount = 0;
     data.letters.forEach((l) => {
       const block = this.theGrid.getBlock(l.coordinates);
       if (!block) {
@@ -659,10 +716,17 @@ export class LexiblePresenterModel extends ClusterfunPresenterModel<LexiblePlaye
       }
       // only capture this block if the score is high enough
       if (word.length > block.score) {
-        if (block.team !== "_" && block.team !== player.teamName) {
+        // Taken off the OTHER TEAM, as opposed to claimed from nobody.  That is
+        // the moment the firework is for - see LetterBlockModel.capture.
+        const stolen = block.team !== "_" && block.team !== player.teamName;
+        if (stolen) {
           player.captures++;
         }
         block.setScore(Math.max(word.length, block.score), player.teamName);
+        if (stolen) {
+          block.capture();
+          capturedCount++;
+        }
         placedLetters.push(l);
       }
       // however, do mark redundant word submissions
@@ -673,6 +737,10 @@ export class LexiblePresenterModel extends ClusterfunPresenterModel<LexiblePlaye
 
     if (word.length > player.longestWord.length) player.longestWord = word;
 
+    // Tiles changed hands, so the joined-to-home regions have moved with them.
+    // The same fill answers "has anybody crossed?" below.
+    const connected = this.updateHomeConnections();
+
     this.sendToEveryone(LexibleBoardUpdateEndpoint, (p, isExited) => {
       return {
         letters: placedLetters,
@@ -682,9 +750,10 @@ export class LexiblePresenterModel extends ClusterfunPresenterModel<LexiblePlaye
       };
     });
 
+    if (capturedCount > 0) this.invokeEvent(LexibleGameEvent.TilesCaptured, capturedCount);
     this.invokeEvent(LexibleGameEvent.WordAccepted, word.toLowerCase(), player);
     if (player.teamName === "A" || player.teamName === "B") {
-      this.checkForWin();
+      this.checkForWin(connected);
     } else {
       Logger.warn("WEIRD: Player with unknown teamname");
     }
@@ -743,12 +812,37 @@ export class LexiblePresenterModel extends ClusterfunPresenterModel<LexiblePlaye
     );
   };
 
+  // Submissions already answered, so a resend is not scored twice.  Keyed by
+  // player and the exact letters; see handleSubmitWordMessage.
+  private _recentSubmissions = new Map<
+    string,
+    { at: number; response: LexibleWordSubmissionResponse }
+  >();
+
   handleSubmitWordMessage = (
     sender: string,
     request: LexibleWordSubmissionRequest,
   ): LexibleWordSubmissionResponse => {
     const player = this.players.find((p) => p.playerId === sender);
     if (!player) throw Error("Unknown player attempted to submit a word");
+
+    // Answering the same submission twice claims the tiles twice and scores it
+    // twice.  That is not hypothetical: LexibleSubmitWordEndpoint retries after
+    // 2s, and speaking a word on the WASM backend blocks this thread for about
+    // as long - so the phone gives up waiting and resends while the presenter
+    // is still mid-synthesis.  Replay the original answer instead.
+    const key = `${sender}|${request.letters
+      .map((l) => `${l.coordinates.x},${l.coordinates.y}`)
+      .join("-")}`;
+    const now = Date.now();
+    for (const [seen, entry] of this._recentSubmissions) {
+      if (now - entry.at > SUBMISSION_MEMORY_MS) this._recentSubmissions.delete(seen);
+    }
+    const alreadyAnswered = this._recentSubmissions.get(key);
+    if (alreadyAnswered) {
+      Logger.info(`Ignoring a repeated submission from ${player.name}`);
+      return alreadyAnswered.response;
+    }
 
     let scoreTooLow = false;
     const word = request.letters
@@ -769,10 +863,12 @@ export class LexiblePresenterModel extends ClusterfunPresenterModel<LexiblePlaye
 
     if (!scoreTooLow && this.wordSet.has(word.toUpperCase())) {
       this.placeSuccessfulWord(request, word, player);
-      return {
+      const response = {
         success: true,
         letters: request.letters,
       };
+      this._recentSubmissions.set(key, { at: now, response });
+      return response;
     } else {
       Logger.info(`Failed word '${word}' because ${scoreTooLow ? "Low score" : "Not found"}`);
       return {

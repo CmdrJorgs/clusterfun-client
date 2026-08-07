@@ -26,3 +26,70 @@ export function teamColor(team: string): string {
   if (team === "B") return COZY.teamB;
   return COZY.sub;
 }
+
+// -------------------------------------------------------------------
+// How strongly a tile is held, as colour.
+//
+// A tile's score is the length of the word that took it, and it can only be
+// taken again by a LONGER word - so score is exactly "how hard this is to
+// shift".  Every claimed tile used to be the flat team colour, which told you
+// who owned the board but nothing about where it was soft.
+//
+// The tile is a MIX OF WHITE AND THE TEAM COLOUR: a 3 is 20% team colour on
+// 80% white, a 9 or more is the full team colour, and everything between is
+// interpolated.  Mixing towards white rather than scaling HSL saturation is
+// deliberate - desaturating alone keeps the original lightness, so a weak
+// tile came out a muddy mid-grey that was hard to tell from a strong one at
+// a distance.  Against a cream board, "pale" reads instantly.
+//
+// The LETTER does not follow.  It is COZY.ink at every strength: a scatter of
+// white letters among dark ones reads as a state you are meant to notice, and
+// there is no such state - the tile colour already carries the strength.
+// -------------------------------------------------------------------
+export const MIN_STRENGTH_SCORE = 3;
+export const FULL_STRENGTH_SCORE = 9;
+/** How much team colour a minimum-strength tile shows. */
+export const MIN_TEAM_MIX = 0.2;
+
+/** 0..1: how far along the weak-to-strong ramp a score sits. */
+export function strengthFraction(score: number): number {
+  const span = FULL_STRENGTH_SCORE - MIN_STRENGTH_SCORE;
+  const t = (score - MIN_STRENGTH_SCORE) / span;
+  return Math.max(0, Math.min(1, t));
+}
+
+/** The proportion of team colour (vs white) a tile at this score shows. */
+export function teamMixForScore(score: number): number {
+  return MIN_TEAM_MIX + strengthFraction(score) * (1 - MIN_TEAM_MIX);
+}
+
+/** The team colour for a tile, mixed towards white as the tile gets weaker. */
+export function teamColorForScore(team: string, score: number): string {
+  const base = teamColor(team);
+  if (team !== "A" && team !== "B") return base;
+  return mixWithWhite(base, teamMixForScore(score));
+}
+
+/**
+ * How much team colour the presenter's roster panels carry.  Low: player names and the
+ * disconnected grey both have to stay readable on top of it, and the board beside it is where
+ * the eye is meant to go.
+ */
+export const TEAM_PANEL_TINT = 0.14;
+
+/** `amount` of the colour, the rest white. 1 is the colour itself. */
+export function mixWithWhite(hex: string, amount: number): string {
+  const t = Math.max(0, Math.min(1, amount));
+  const { r, g, b } = hexToRgb(hex);
+  const mix = (channel: number) => Math.round(255 + (channel - 255) * t);
+  return `rgb(${mix(r)}, ${mix(g)}, ${mix(b)})`;
+}
+
+export function hexToRgb(hex: string): { r: number; g: number; b: number } {
+  const clean = hex.replace("#", "");
+  return {
+    r: parseInt(clean.substring(0, 2), 16),
+    g: parseInt(clean.substring(2, 4), 16),
+    b: parseInt(clean.substring(4, 6), 16),
+  };
+}

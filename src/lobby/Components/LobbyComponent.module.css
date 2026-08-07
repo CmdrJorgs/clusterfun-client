@@ -420,6 +420,31 @@
 .client .logoRow {
   justify-content: center;
 }
+
+/* The client lobby's hero logo: the lockup fills 90% of the phone's width.
+   Everything inside is sized in em off this one font-size, and the font-size is in vw, so
+   the whole thing scales with the screen instead of being right on one device. The 7.4em
+   divisor is the lockup's own width - roughly one em of icon plus ten Bungee capitals. */
+.client .heroLogo {
+  /* Full content width, centred, with the SIZE doing the filling. A `width: 90%` here does
+     not mean 90% of the phone: .client carries 44px of horizontal padding, so 90% of the
+     content box measured 81% of the screen. Driving it from font-size hits the real target
+     and cannot be thrown off by a padding change. */
+  width: 100%;
+  margin: 10px auto 4px auto;
+  justify-content: center;
+  gap: 0.16em;
+  /* CANVAS pixels, not vw. The client lobby is drawn on a fixed-width canvas that is then
+     scaled to the device, so a vw value measures the browser WINDOW - right in production,
+     where the canvas is the window, and wrong in the Test Lobby, where four phones share
+     one. A constant here is 90% of the phone on every device and in every harness.
+     The 130 is the lockup's own width: about 7.4em of icon plus ten Bungee capitals. */
+  font-size: 130px;
+}
+.client .heroLogo .wordmark {
+  font-size: 1em;
+  white-space: nowrap;
+}
 .client .wordmark {
   font-size: calc(34px * var(--fs));
 }
@@ -466,26 +491,22 @@
   font-family: var(--mono);
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  font-size: calc(18px * var(--fs));
-  color: var(--text-dim);
-}
-.welcomeBadge {
-  font-family: var(--mono);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-size: calc(14px * var(--fs));
-  color: #08080d;
-  background: var(--lime);
-  border-radius: 999px;
-  padding: 4px 12px;
+  /* Up from 18px/dim: these name the fields a player has to fill in on a
+     phone, at a party, in the dark - they should not be the faintest text
+     on the screen. */
+  font-size: calc(24px * var(--fs));
+  font-weight: 700;
+  color: var(--text);
 }
 .textInput {
   width: 100%;
   font-family: var(--ui);
   font-weight: 500;
   font-size: calc(30px * var(--fs));
-  color: var(--text);
-  background: var(--field);
+  /* Dark on light: the two fields you MUST fill in should look like the
+     things you type into, not like more of the dark chrome around them. */
+  color: #12131a;
+  background: #f2f5fa;
   border: 1px solid var(--border);
   border-radius: 16px;
   padding: 20px 22px;
@@ -495,7 +516,7 @@
     box-shadow 0.15s ease;
 }
 .textInput::placeholder {
-  color: var(--text-faint);
+  color: rgba(18, 19, 26, 0.45);
 }
 .textInput:focus-visible {
   border-color: var(--cyan);
@@ -516,8 +537,18 @@
 /* ---- Avatar picker ---- */
 .avatarGrid {
   display: grid;
-  grid-template-columns: repeat(8, 1fr);
-  gap: 10px;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(1, auto);
+  grid-auto-columns: 124px;
+  gap: 12px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  /* drag-to-scroll (see DragScroller) - no visible scrollbar */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.avatarGrid::-webkit-scrollbar {
+  display: none;
 }
 .avatarButton {
   aspect-ratio: 1 / 1;
@@ -529,19 +560,26 @@
   border-radius: 16px;
   cursor: pointer;
   padding: 0;
-  transition:
-    transform 0.15s ease,
-    box-shadow 0.15s ease;
+  /* NO transition on the highlight.  With one, tapping several avatars
+     quickly leaves rings fading out on the previous ones while the new one
+     fades in - which reads as the highlight being split across avatars.
+     The ring is now instant; only the press feedback animates. */
+  transition: transform 0.08s ease;
 }
-.avatarButton svg {
-  width: 62%;
-  height: 62%;
+/* Immediate feedback on touch, so a tap feels answered before the click
+   even fires */
+.avatarButton:active {
+  transform: scale(0.94);
 }
 .avatarSelected {
-  box-shadow:
-    0 0 0 2px #08080d,
-    0 0 0 4px var(--cyan);
-  transform: scale(1.05);
+  /* An outline rather than a spread box-shadow: outlines are not clipped by
+     the scroll container the picker lives in. */
+  outline: 4px solid var(--cyan);
+  outline-offset: 2px;
+  background: rgba(34, 224, 255, 0.12);
+}
+.avatarSelected:active {
+  transform: scale(0.94);
 }
 
 /* ---- Color picker ---- */
@@ -566,7 +604,10 @@
 .codeCells {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 14px;
+  gap: 9px;
+  /* 40% smaller than the full-width original, centered in the card */
+  max-width: 60%;
+  margin: 0 auto;
 }
 .codeCell {
   aspect-ratio: 3 / 4;
@@ -575,9 +616,10 @@
   justify-content: center;
   font-family: var(--mono);
   font-weight: 700;
-  font-size: calc(64px * var(--fs));
-  color: var(--text);
-  background: var(--field);
+  font-size: calc(38px * var(--fs));
+  /* Dark on light, same as the name field - these are inputs, not chrome */
+  color: #12131a;
+  background: #f2f5fa;
   border: 2px solid var(--border);
   border-radius: 16px;
 }
@@ -594,6 +636,14 @@
   cursor: text;
   border: none;
   background: transparent;
+  /* iOS zooms the whole page when it focuses an input whose font is under
+     16px.  This one is invisible, so the value only matters for that rule -
+     but it has to be there, in real px, not scaled units. */
+  font-size: 16px;
+  /* The input covers the cells, so without this it swallows every tap and the
+     cells can never tell WHICH letter was touched.  It is a keyboard sink
+     only; the cells do the hit-testing and focus it themselves. */
+  pointer-events: none;
 }
 
 /* ---- Join / host buttons ---- */
@@ -618,7 +668,10 @@
   transform: translateY(-2px);
 }
 .joinButton:disabled {
-  opacity: 0.4;
+  /* Desaturated, so "not yet" reads as inactive rather than as a dimmer
+     version of the same bright invitation. */
+  filter: grayscale(1);
+  opacity: 0.45;
   cursor: not-allowed;
   box-shadow: none;
 }
@@ -693,21 +746,110 @@
   gap: 14px;
   width: 100%;
 }
+/* The dome shading itself is inline (domeStyle in the component) because it is built
+   from each bubble's own colour.  What stays here is the shape and the movement: a
+   pressed bubble sits a little smaller and lower, like something actually pushed in. */
 .fidgetBubble {
   aspect-ratio: 1 / 1;
   border-radius: 50%;
   border: none;
   cursor: pointer;
   padding: 0;
-  box-shadow: 0 0 18px -4px currentColor;
   transition:
-    transform 0.15s ease,
-    box-shadow 0.15s ease;
+    transform 0.12s ease,
+    box-shadow 0.12s ease,
+    background 0.12s ease;
+}
+.fidgetBubble:active {
+  transform: scale(0.94);
 }
 .fidgetPopped {
-  transform: scale(0.72);
-  box-shadow: inset 0 6px 14px rgba(0, 0, 0, 0.55);
-  filter: brightness(0.5);
+  transform: scale(0.9) translateY(1px);
+}
+
+/* Unselected avatars and colours sit back by 35%, so the one you have chosen is the
+   thing your eye lands on rather than one of thirteen equally bright options. */
+.pickerDimmed {
+  opacity: 0.5;
+  transition: opacity 0.12s ease;
+}
+.pickerDimmed:hover {
+  opacity: 0.75;
+}
+
+/* The avatar row scrolls sideways past the edge of the phone.  The arrow rides on top of
+   that edge, over a short fade so the avatars slide out from under it rather than being
+   cut off dead - which is what makes it read as "more this way" and not as a button. */
+.avatarRow {
+  position: relative;
+}
+.avatarMore {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 8px;
+  pointer-events: none;
+  font-family: var(--mono);
+  font-size: calc(46px * var(--fs));
+  font-weight: 700;
+  line-height: 1;
+  /* Bright, not faint: the whole problem was that there was nothing to see. */
+  color: var(--text);
+  text-shadow: 0 0 10px rgba(0, 0, 0, 0.9);
+  background: linear-gradient(to right, rgba(13, 15, 22, 0), rgba(13, 15, 22, 0.96) 55%);
+  border-radius: 0 16px 16px 0;
+  animation: nudgeRight 1.6s ease-in-out infinite;
+}
+@keyframes nudgeRight {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(3px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .avatarMore {
+    animation: none;
+  }
+}
+
+/* The hint that the game grid keeps going below the fold. */
+.scrollHint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 4px 0 2px;
+  font-family: var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: calc(15px * var(--fs));
+  color: var(--text-faint);
+}
+.scrollHintArrow {
+  display: inline-block;
+  animation: scrollNudge 1.6s ease-in-out infinite;
+}
+@keyframes scrollNudge {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(3px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .scrollHintArrow {
+    animation: none;
+  }
 }
 
 .clientVersion {
@@ -737,4 +879,80 @@
   .fidgetPopped {
     transform: none;
   }
+}
+
+/* ================================================================
+   Phone input polish
+   ================================================================ */
+
+/* Double-tap-to-zoom is what makes every tap wait ~300ms to see whether a
+   second one is coming.  Turning it off makes the whole lobby feel immediate
+   and stops an accidental double-tap zooming the layout. */
+.client,
+.client * {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* The blinking cursor in the room-code box the caret is sitting in. */
+.codeCaret {
+  position: absolute;
+  width: 3px;
+  height: 46%;
+  /* Dark caret now that the cells are light */
+  background: #12131a;
+  border-radius: 2px;
+  animation: cf-caret-blink 1.1s step-end infinite;
+}
+.codeCell {
+  position: relative;
+}
+@keyframes cf-caret-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* A caret in an empty cell needs the cell to look ready, not filled. */
+.codeCells {
+  cursor: text;
+}
+
+/* ---- Join failure diagnostics ---- */
+.diagnostics {
+  margin-top: 14px;
+  text-align: left;
+  font-family: var(--mono);
+  font-size: calc(15px * var(--fs));
+}
+.diagnostics summary {
+  cursor: pointer;
+  text-decoration: underline;
+  opacity: 0.85;
+}
+.diagnosticsBody {
+  margin: 10px 0 0 0;
+  padding: 12px 14px;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: calc(14px * var(--fs));
+  line-height: 1.5;
+}
+.diagnosticsCopy {
+  margin-top: 10px;
+  font-family: var(--ui);
+  font-size: calc(15px * var(--fs));
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
 }

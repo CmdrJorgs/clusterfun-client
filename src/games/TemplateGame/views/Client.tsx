@@ -1,3 +1,4 @@
+import { TEMPLATE_VERSION_HISTORY } from "../models/GameSettings";
 // The player's phone view.  One sub-screen per client game state, chosen by
 // renderSubScreen().  Keep this thin - it captures input and shows feedback;
 // the presenter owns the real game.
@@ -15,6 +16,7 @@ import {
   ScaleToWidth,
   ErrorBoundary,
   PlayerAvatar,
+  ClientHeader,
 } from "libs";
 import Logger from "js-logger";
 
@@ -95,7 +97,8 @@ class GameScreen extends React.Component<{ appModel?: TemplateClientModel }> {
     return (
       <div>
         <h4>
-          <PlayerAvatar avatarId={appModel.avatarId} size={50} /> {appModel.playerName}
+          <PlayerAvatar avatarId={appModel.avatarId} colorIndex={appModel.avatarColor} size={50} />{" "}
+          {appModel.playerName}
         </h4>
 
         <div>
@@ -217,15 +220,15 @@ export default class Client extends React.Component<{
           fillHeight
         >
           <div className={styles.gameclient}>
-            <div className={classNames(styles.divRow, styles.topbar)}>
-              <span className={classNames(styles.gametitle)}>Template</span>
-              <span>
-                <PlayerAvatar avatarId={appModel?.avatarId ?? 0} size={40} /> {appModel?.playerName}
-              </span>
-              <button className={classNames(styles.quitbutton)} onClick={() => appModel?.quitApp()}>
-                X
-              </button>
-            </div>
+            <ClientHeader
+              className={styles.topbar}
+              title="Template"
+              history={TEMPLATE_VERSION_HISTORY}
+              avatarId={appModel?.avatarId ?? 0}
+              avatarColor={appModel?.avatarColor}
+              playerName={appModel?.playerName}
+              onQuit={() => appModel?.quitApp()}
+            />
             <div style={{ margin: "100px" }}>
               <ErrorBoundary>{this.renderSubScreen()}</ErrorBoundary>
             </div>

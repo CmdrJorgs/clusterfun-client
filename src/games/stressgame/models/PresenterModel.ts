@@ -4,6 +4,7 @@ import {
   ISessionHelper,
   ClusterFunGameProps,
   ClusterfunPresenterModel,
+  ReconnectInfo,
   ITelemetryLogger,
   IStorage,
   ITypeHelper,
@@ -117,10 +118,6 @@ export interface ServerHealthInfo {
     activeUsers: number;
   };
   summary: LabeledData[];
-  series: {
-    date: number;
-    columns: LabeledData[];
-  }[];
   cpuUsage: {
     user: number;
     system: number;
@@ -167,8 +164,10 @@ export class StressatoPresenterModel extends ClusterfunPresenterModel<StressatoP
   //
   //--------------------------------------------------------------------------------------
   pingServerHealth = async () => {
+    // Not /api/am_i_healthy - that is an HTML page for people to look at.  This is the
+    // same numbers as JSON, which is what a load test watching the server actually wants.
     this.serverHealth = await this.session.serverCall<ServerHealthInfo>(
-      "/api/am_i_healthy",
+      "/api/health_data",
       undefined,
     );
   };
@@ -196,6 +195,15 @@ export class StressatoPresenterModel extends ClusterfunPresenterModel<StressatoP
 
     return newPlayer;
   }
+
+  // -------------------------------------------------------------------
+  //  onPlayerReturned / onPlayerDisconnected - Stressato holds no per-player
+  //  game state at all; every client is just a traffic generator pointed at
+  //  the relay.  A phone that drops stops sending and starts again when it
+  //  comes back, which is exactly the behavior we want to measure.
+  // -------------------------------------------------------------------
+  protected onPlayerReturned(_player: StressatoPlayer, _info: ReconnectInfo) {}
+  protected onPlayerDisconnected(_player: StressatoPlayer) {}
 
   // -------------------------------------------------------------------
   //

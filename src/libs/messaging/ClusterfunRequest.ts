@@ -2,7 +2,8 @@ import Logger from "js-logger";
 import {
   ClusterFunMessageHeader,
   ClusterFunRoutingHeader,
-  parseMessage,
+  parseEnvelope,
+  parsePayload,
   stringifyMessage,
 } from "libs/comms";
 import MessageEndpoint from "./MessageEndpoint";
@@ -67,31 +68,55 @@ export default class ClusterfunRequest<REQUEST, RESPONSE> implements PromiseLike
     onfulfilled?: ((value: RESPONSE) => TResult1 | PromiseLike<TResult1>) | null | undefined,
     onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | null | undefined,
   ): PromiseLike<TResult1 | TResult2> {
-    if (this._state === RequestState.Resolved && onfulfilled) {
-      return Promise.resolve(onfulfilled(this._response!));
-    } else if (this._state === RequestState.Rejected && onrejected) {
-      return Promise.reject(onrejected(this._error!));
+    // Standard Promise semantics: a rejection handler RECOVERS (the derived
+    // promise resolves with its return value), a missing handler propagates
+    // the settlement, and a handler that throws rejects the derived promise.
+    if (this._state === RequestState.Resolved) {
+      return onfulfilled
+        ? Promise.resolve().then(() => onfulfilled(this._response!))
+        : (Promise.resolve(this._response!) as unknown as PromiseLike<TResult1>);
+    }
+    if (this._state === RequestState.Rejected) {
+      return onrejected
+        ? Promise.resolve().then(() => onrejected(this._error!))
+        : Promise.reject(this._error);
     }
 
-    return new Promise<TResult1>((resolve, reject) => {
-      if (onfulfilled) {
-        this._fulfilledCallbacks!.push((value: RESPONSE) => {
-          resolve(onfulfilled(value));
-        });
-      }
-      if (onrejected) {
-        this._rejectedCallbacks!.push((error: any) => {
-          reject(onrejected(error));
-        });
-      }
+    return new Promise<TResult1 | TResult2>((resolve, reject) => {
+      this._fulfilledCallbacks!.push((value: RESPONSE) => {
+        if (onfulfilled) {
+          try {
+            resolve(onfulfilled(value));
+          } catch (err) {
+            reject(err);
+          }
+        } else {
+          resolve(value as unknown as TResult1);
+        }
+      });
+      this._rejectedCallbacks!.push((error: any) => {
+        if (onrejected) {
+          try {
+            resolve(onrejected(error));
+          } catch (err) {
+            reject(err);
+          }
+        } else {
+          reject(error);
+        }
+      });
     });
   }
 
   private respondToMessage(data: string): void {
-    const { routing, payload } = parseMessage(data);
+    // Route first, payload second.  Every in-flight request has its own handler
+    // on the socket, so with N requests outstanding a single large response was
+    // being fully JSON-parsed N times before N-1 of them discarded it.
+    const { routing, payloadText } = parseEnvelope(data);
     if (routing.route !== this.endpoint.route || routing.requestId !== this.id) {
       return; // this message is not for us
     }
+    const payload = parsePayload(payloadText);
     if (routing.role === "response") {
       this.resolve(payload as RESPONSE);
     } else if (routing.role === "error") {

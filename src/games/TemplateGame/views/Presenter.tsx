@@ -7,7 +7,7 @@ import styles from "./Presenter.module.css";
 import classNames from "classnames";
 import { makeObservable, observable } from "mobx";
 import TemplateAssets from "../assets/Assets";
-import { TemplateVersion } from "../models/GameSettings";
+import { TEMPLATE_VERSION_HISTORY } from "../models/GameSettings";
 import {
   BaseAnimationController,
   MediaHelper,
@@ -18,6 +18,7 @@ import {
   DevUI,
   UINormalizer,
   PlayerAvatar,
+  GameVersionTag,
 } from "libs";
 import {
   TemplatePresenterModel,
@@ -48,7 +49,12 @@ class GatheringPlayersPage extends React.Component<{ appModel?: TemplatePresente
             <div className={styles.divRow}>
               {appModel.players.map((player) => (
                 <div className={styles.nameBox} key={player.playerId}>
-                  <PlayerAvatar avatarId={player.avatarId} size={48} /> {player.name}
+                  <PlayerAvatar
+                    avatarId={player.avatarId}
+                    colorIndex={player.avatarColor}
+                    size={48}
+                  />{" "}
+                  {player.name}
                 </div>
               ))}
             </div>
@@ -90,7 +96,8 @@ class PausedGamePage extends React.Component<{ appModel?: TemplatePresenterModel
         <ul>
           {appModel.players.map((player) => (
             <li key={player.playerId}>
-              <PlayerAvatar avatarId={player.avatarId} size={32} /> {player.name}
+              <PlayerAvatar avatarId={player.avatarId} colorIndex={player.avatarColor} size={32} />{" "}
+              {player.name}
             </li>
           ))}
         </ul>
@@ -215,7 +222,8 @@ class PlayingPage extends React.Component<{
             <div className={styles.scoreStrip}>
               {appModel.players.map((p) => (
                 <span className={styles.scoreItem} key={p.playerId}>
-                  <PlayerAvatar avatarId={p.avatarId} size={36} /> {p.name}: {p.totalScore}
+                  <PlayerAvatar avatarId={p.avatarId} colorIndex={p.avatarColor} size={36} />{" "}
+                  {p.name}: {p.totalScore}
                 </span>
               ))}
             </div>
@@ -256,7 +264,12 @@ class EndOfRoundPage extends React.Component<{ appModel?: TemplatePresenterModel
           <div>
             <div className={styles.winnerBanner}>
               {winners.map((w) => (
-                <PlayerAvatar avatarId={w.avatarId} size={64} key={w.playerId} />
+                <PlayerAvatar
+                  avatarId={w.avatarId}
+                  colorIndex={w.avatarColor}
+                  size={64}
+                  key={w.playerId}
+                />
               ))}{" "}
               {winners.length === 1
                 ? `🏆 ${winners[0].name} wins with ${winners[0].totalScore} points!`
@@ -310,7 +323,7 @@ export default class Presenter extends React.Component<{
         appModel!.secondsLeftInStage <= 10
       ) {
         timeAlertLoaded = false;
-        this.media.repeatSound("ding.wav", 5, 100);
+        this.media.repeatSound(TemplateAssets.sounds.ding, 5, 100);
       }
     });
 
@@ -382,7 +395,9 @@ export default class Presenter extends React.Component<{
         </button>
         <div className={classNames(styles.roomCode)}>Room Code: {appModel.roomId}</div>
         <DevUI context={appModel} children={<div></div>} />
-        <div style={{ marginLeft: "50px" }}>v{TemplateVersion}</div>
+        <div style={{ marginLeft: "50px" }}>
+          <GameVersionTag title="Template" history={TEMPLATE_VERSION_HISTORY} showChanges />
+        </div>
       </div>
     );
   }

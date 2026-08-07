@@ -60,9 +60,27 @@
 
 /* Overall Formatting */
 
+/* Rule on the left, the board doing it on the right.  The demo tiles are 50% bigger
+   than they were, and the width for that comes from the caption column being narrow. */
 .gameclient .instructionsRow {
   display: flex;
-  flex-wrap: nowrap;
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+/* 20% smaller, so the animation gets the room instead. */
+.gameclient .instructionParagraph {
+  font-size: 80%;
+  margin: 0;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* Never shrink the board to make room for words - it is the part being watched. */
+.gameclient .instructionsRow > div {
+  flex: 0 0 auto;
 }
 
 .gameclient .divRow {
@@ -75,13 +93,16 @@
   font-weight: 700;
 }
 
+/* Edge to edge: title, version, team, name, quit - in that order, with the space
+   between them rather than around them, so the title starts at the left edge and the
+   quit button ends at the right. `space-around` used to leave a margin at both ends
+   and float the whole row in the middle. */
+/* Arrangement belongs to the shared ClientHeader - this only says what colour it is. The
+   font-size and padding that used to live here changed the fixed region widths. */
 .gameclient .topbar {
-  display: flex;
-  justify-content: space-around;
-  align-items: center;
   background: var(--panel);
-  padding: 14px 18px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  padding: 0;
 }
 
 .gameclient .quitbutton {

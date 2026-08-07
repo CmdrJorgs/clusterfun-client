@@ -1,10 +1,11 @@
+import { STRESSATO_VERSION_HISTORY } from "../models/GameSettings";
 // App Navigation handled here
 import React from "react";
 import { observer, inject } from "mobx-react";
 import { StressatoClientModel } from "../models/ClientModel";
 import styles from "./Client.module.css";
 import classNames from "classnames";
-import { UIProperties, ScaleToWidth, ErrorBoundary, Row } from "libs";
+import { UIProperties, UINormalizer, ErrorBoundary, Row, ClientHeader } from "libs";
 
 interface NumberAdjusterProps {
   value: number;
@@ -144,13 +145,15 @@ export default class Client extends React.Component<{
           fillHeight
         >
           <div className={styles.gameclient}>
-            <div className={classNames(styles.divRow, styles.topbar)}>
-              <span className={classNames(styles.gametitle)}>Stressato</span>
-              <span>{appModel?.playerName}</span>
-              <button className={classNames(styles.quitbutton)} onClick={() => appModel?.quitApp()}>
-                X
-              </button>
-            </div>
+            <ClientHeader
+              className={styles.topbar}
+              title="Stressato"
+              history={STRESSATO_VERSION_HISTORY}
+              avatarId={appModel?.avatarId ?? 0}
+              avatarColor={appModel?.avatarColor}
+              playerName={appModel?.playerName}
+              onQuit={() => appModel?.quitApp()}
+            />
             <div style={{ margin: "10px" }}>
               <ErrorBoundary>
                 <GameScreen />

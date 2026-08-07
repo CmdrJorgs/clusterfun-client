@@ -1,6 +1,7 @@
 import { action, makeObservable, observable } from "mobx";
 import { LetterBlockModel } from "./LetterBlockModel";
 import { LetterGridModel } from "./LetterGridModel";
+import { chainActionFor } from "./dragSelection";
 import { LexibleGameEvent } from "./PresenterModel";
 import {
   ISessionHelper,
@@ -13,7 +14,7 @@ import {
   ITypeHelper,
 } from "libs";
 import Logger from "js-logger";
-import { findHotPathInGrid, LetterGridPath } from "./LetterGridPath";
+import { applyHomeConnections } from "./teamAreas";
 import {
   LexibleBoardUpdateEndpoint,
   LexibleBoardUpdateNotification,
@@ -74,8 +75,12 @@ export const getLexibleClientTypeHelper = (
     shouldStringify(typeName: string, propertyName: string, object: any): boolean {
       switch (propertyName) {
         case "__blockid":
-          return false;
-        case "failFade":
+        // Transient animation state.  The names must be the PRIVATE fields: the
+        // serializer walks real properties, so "failFade" (the getter) never
+        // matched and a checkpoint taken mid-flash restored a tile stuck red
+        // with no animator left running to clear it.
+        case "_failFade":
+        case "_captureSeq":
           return false;
       }
 
@@ -202,13 +207,70 @@ export class LexibleClientModel extends ClusterfunClientModel {
     let selectable = true;
     let isSelected = block.isSelectedByPlayer(playerId);
     if (!isSelected) {
-      if (this.startFromTeamArea && this.letterChain.length === 0 && block.team !== this.myTeam) {
+      if (!this.canStartWordAt(block)) {
         selectable = false;
       }
     }
 
     if (selectable) {
       block.selectForPlayer(playerId, !isSelected);
+    }
+  }
+
+  // -------------------------------------------------------------------
+  //  canStartWordAt - may a word BEGIN on this letter?
+  //
+  //  With "words must start from team territory" on, only your own tiles will
+  //  do.  This is also what decides, on touch-down, whether a drag spells a
+  //  word or scrolls the board - see dragSelection.ts.
+  // -------------------------------------------------------------------
+  canStartWordAt(block: LetterBlockModel): boolean {
+    if (this.letterChain.length > 0) return true;
+    if (!this.startFromTeamArea) return true;
+    return block.team === this.myTeam;
+  }
+
+  // -------------------------------------------------------------------
+  //  canDragFrom - would starting a drag on this letter DO anything?
+  //
+  //  This is what decides spell-vs-scroll on touch-down, and it is not the
+  //  same question as canStartWordAt.  Once a word is in progress
+  //  canStartWordAt is true for every letter on the board, so using it here
+  //  meant that after one drag EVERY press was captured for spelling and the
+  //  board could not be scrolled again until the word was submitted.
+  //
+  //  A press only spells if it would actually extend or retract the word.
+  //  Anything else belongs to the scroller.
+  // -------------------------------------------------------------------
+  canDragFrom(block: LetterBlockModel): boolean {
+    const chain = this.letterChain.map((l) => l.coordinates);
+    const action = chainActionFor(chain, block.coordinates, this.canStartWordAt(block));
+    return action.kind !== "none";
+  }
+
+  // -------------------------------------------------------------------
+  //  dragSelectTo - the finger has moved onto this letter mid-drag.
+  //
+  //  Adds it, or takes the last one off if the finger has retraced.  Doing
+  //  nothing is a perfectly normal outcome - a finger crosses plenty of
+  //  letters it is not allowed to reach.
+  // -------------------------------------------------------------------
+  dragSelectTo(block: LetterBlockModel, playerId: string) {
+    const chain = this.letterChain.map((l) => l.coordinates);
+    const action = chainActionFor(chain, block.coordinates, this.canStartWordAt(block));
+
+    switch (action.kind) {
+      case "start":
+      case "extend":
+        block.selectForPlayer(playerId, true);
+        break;
+      case "retract": {
+        const last = this.letterChain[this.letterChain.length - 1];
+        if (last) last.selectForPlayer(playerId, false);
+        break;
+      }
+      case "none":
+        break;
     }
   }
 
@@ -241,50 +303,42 @@ export class LexibleClientModel extends ClusterfunClientModel {
   }
 
   // -------------------------------------------------------------------
-  //  checkForWin - a win is when there is a contiguous line of blocks
-  //                from one side to the other for a single team.
-  //                Blocks are not continguous through corners.
+  //  updateHomeConnections - redraw the team outlines after the board moves.
+  //
+  //  The same call the presenter makes, so the phone in your hand and the
+  //  screen the room is watching agree about where your chain is broken.
+  //
+  //  This replaced a copy of the presenter's A* "hot path" animation, which
+  //  each phone ran on EVERY accepted word, glowing one tile per 50ms along a
+  //  route that ran through unclaimed and enemy squares.
   // -------------------------------------------------------------------
-  async updateWinningPaths() {
-    this.theGrid.processBlocks((b) => {
-      b.onPath = false;
-    });
-    await this.waitForRealTime(0); // allow mobx to clear animations
-    const paths: Record<"A" | "B", LetterGridPath> = {
-      A: findHotPathInGrid(this.theGrid, "A"),
-      B: findHotPathInGrid(this.theGrid, "B"),
-    };
-    let pathsToDraw: Array<"A" | "B"> = ["A", "B"];
-    for (const team of ["A", "B"] as Array<"A" | "B">) {
-      const path = paths[team];
-      if (path.cost.enemy === 0 && path.cost.neutral === 0) {
-        pathsToDraw = [team];
-      }
-    }
-    for (let i = 0; i < this.theGrid.width * 4; i++) {
-      let paintedOne = false;
-      for (const team of pathsToDraw) {
-        if (paths[team].nodes.length > i) {
-          paintedOne = true;
-          this.theGrid.getBlock(paths[team].nodes[i])!.onPath = true;
-        }
-      }
-      if (!paintedOne) {
-        break;
-      } else {
-        await this.waitForRealTime(50);
-      }
-    }
+  updateHomeConnections() {
+    applyHomeConnections(this.theGrid);
   }
 
   protected handleBoardUpdateMessage = (message: LexibleBoardUpdateNotification) => {
+    let capturedCount = 0;
     message.letters.forEach((l) => {
       const block = this.theGrid.getBlock(l.coordinates);
-      if (!block) Logger.warn(`WEIRD: No block at ${l.coordinates}`);
-      else block.setScore(Math.max(message.score, block.score), message.scoringTeam);
+      if (!block) {
+        Logger.warn(`WEIRD: No block at ${l.coordinates}`);
+        return;
+      }
+      // The presenter sends every letter of the word, including tiles that did not
+      // move.  The firework is only for tiles taken off the OTHER TEAM, which is
+      // the same rule the presenter applies - so the phones and the big screen
+      // celebrate the same moments.
+      const stolen =
+        block.team !== "_" && block.team !== message.scoringTeam && message.score > block.score;
+      block.setScore(Math.max(message.score, block.score), message.scoringTeam);
+      if (stolen) {
+        block.capture();
+        capturedCount++;
+      }
     });
-    this.updateWinningPaths();
+    this.updateHomeConnections();
     this.saveCheckpoint();
+    if (capturedCount > 0) this.invokeEvent(LexibleGameEvent.TilesCaptured, capturedCount);
     this.invokeEvent(LexibleGameEvent.WordAccepted);
   };
 

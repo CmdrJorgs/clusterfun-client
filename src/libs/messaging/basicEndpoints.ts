@@ -4,8 +4,25 @@ import MessageEndpoint from "./MessageEndpoint";
  * Endpoint for joining a game from the client
  */
 export const JoinEndpoint: MessageEndpoint<
-  { playerName: string; avatarId?: number },
-  { isRejoin: boolean; didJoin: boolean; joinError?: string }
+  {
+    playerName: string;
+    avatarId?: number;
+    avatarColor?: number;
+    // A private, random id this browser keeps for itself.  Reconnecting is
+    // matched on THIS, not on the player's name - a name is public, visible on
+    // the big screen, and anyone could type it in and take over your seat.
+    playerToken?: string;
+  },
+  {
+    isRejoin: boolean;
+    didJoin: boolean;
+    joinError?: string;
+    // The permanent name of the seat the host gave us.  NOT the relay's
+    // connection id - that changes every time this phone reconnects, while
+    // this does not.  The client has to use this to recognise itself in
+    // anything the host broadcasts (rosters, attack targets, scoreboards).
+    playerId?: string;
+  }
 > = {
   route: "/basic/handshake/join",
   suggestedRetryIntervalMs: 1000,

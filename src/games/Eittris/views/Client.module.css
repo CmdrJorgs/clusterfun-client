@@ -1,0 +1,682 @@
+/* Overall Formatting */
+.gameclient {
+  /* The right-hand column, shared by the target list and the Next tray so the
+     two line up exactly.  The board row is 1000 virtual px wide, the board
+     itself is 10 cells of 64px plus its 8px of border, and they sit 18px
+     apart - whatever is left is the column. */
+  --side-column: calc(1000px - (10 * 64px + 8px) - 18px);
+  position: relative; /* the dev panel hangs off this */
+  width: 100%;
+  height: 100%;
+  background-color: rgb(43, 65, 98);
+  color: #eeeeee;
+  overflow: hidden;
+  /* The phone's base size, which nearly everything below is a percentage of.
+     Sixty per cent up on where it started: this is read at arm's length, in a
+     lit room, by somebody who is also trying to play. */
+  font-size: 88px;
+  font-family: sans-serif;
+}
+
+/* Afflicted: the background turns red.  A deep, desaturated red rather than a bright one -
+   it has to be unmistakable at a glance without making the board itself harder to read,
+   which is the thing you are actually trying to look at.  The fade keeps it from flickering
+   when a short affliction lands and lifts.
+
+   Both classes in the selector so this does not depend on which rule came last. */
+.gameclient.afflictedScreen {
+  background-color: rgb(112, 34, 40);
+}
+
+.gameclient {
+  transition: background-color 300ms ease-out;
+}
+
+.gameclient button {
+  font-size: 100%;
+  padding: 15px;
+  margin: 5px;
+}
+
+.gameclient .divRow {
+  display: flex;
+  flex-wrap: nowrap;
+}
+
+.gameclient .gametitle {
+  font-weight: 800;
+}
+
+/* Arrangement belongs to the shared ClientHeader; this only says what colour it is. */
+.gameclient .topbar {
+  padding: 0;
+}
+
+/* Stands in for the title in dev, so the row starts clear of the floating panel */
+/* Who you are, at a size that reads across a table */
+.gameclient .whoami {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* The dev panel: over the game, never part of it.  Dimmed so it is obviously not
+   something a player is meant to be reading. */
+.gameclient .devOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 6px 6px;
+  background: rgba(0, 0, 0, 0.62);
+  border-bottom-right-radius: 14px;
+  opacity: 0.85;
+}
+
+.gameclient .quitbutton {
+  font-size: 64px;
+  font-weight: 800;
+  padding: 0;
+  width: 100px;
+  margin: 0;
+}
+
+.gameclient .wait_text {
+  font-size: 90%;
+}
+
+/* The whole of the how-to-play panel, scrolled rather than clipped.  A keyboard seat is
+   eight rows plus its chips, which is more than is left of a phone screen once the waiting
+   message is above it - and a control you cannot see is one you do not know you have. */
+.gameclient .instructions {
+  background: #1b2a42;
+  border: 2px solid #4d648a;
+  border-radius: 16px;
+  padding: 10px 30px;
+  font-size: 60%;
+  margin-top: 40px;
+  max-height: 1450px;
+  overflow-y: auto;
+  /* A finger scrolling this must not drag the page behind it */
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}
+
+/* ---- The player's board ---- */
+
+.gameclient .statusRow {
+  display: flex;
+  align-items: center;
+  gap: 30px;
+  font-size: 70%;
+  margin-bottom: 18px;
+}
+
+.gameclient .rowsCleared {
+  font-weight: 800;
+  color: #ffd34e;
+}
+
+.gameclient .nextLabelOld {
+  margin-left: auto;
+  font-size: 80%;
+  color: #b8c4d8;
+}
+
+.gameclient .boardArea {
+  position: relative;
+  display: inline-block;
+  border: 4px solid #4d648a;
+  border-radius: 6px;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.gameclient .toppedOut {
+  position: absolute;
+  top: 45%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-18deg);
+  font-weight: 900;
+  color: #ff9090;
+  text-shadow: 0 0 12px #000;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.gameclient .hintRow {
+  font-size: 40%;
+  color: #b8c4d8;
+  margin-top: 14px;
+}
+
+/* ---- Board + target list side by side ---- */
+
+.gameclient .boardRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+}
+
+/* The next-piece tray rides at the right of the power row, bottom-aligned
+   with the antidote button; the pieces inside are vertically centered. */
+.gameclient .nextBox {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 16px;
+  border: 4px solid #4d648a;
+  border-radius: 12px;
+  background: #0d1626;
+  /* Same width as the target list it sits directly above */
+  box-sizing: border-box;
+  flex: 0 0 var(--side-column);
+  width: var(--side-column);
+  margin-left: auto;
+  min-height: 116px;
+}
+
+.gameclient .nextPieces {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 96px;
+}
+
+.gameclient .targetList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-sizing: border-box;
+  flex: 0 0 var(--side-column);
+  width: var(--side-column);
+  /* Never taller than the board beside it, and scrolls when there are more
+     players than fit - with twenty of them the list would otherwise run off
+     the bottom of the phone and the last few could never be targeted. */
+  max-height: 1352px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  /* The list scrolls with a finger; no scrollbar furniture on a phone */
+  scrollbar-width: none;
+  /* never scroll sideways - entries clip/ellipsize instead */
+  overflow-x: hidden;
+  min-width: 0;
+  min-height: 0;
+}
+
+.gameclient .targetList::-webkit-scrollbar {
+  display: none;
+}
+
+.gameclient .targetEntry {
+  position: relative;
+  display: flex;
+  align-items: center;
+  /* Keep their height so the list SCROLLS rather than squashing everyone
+     into an unreadable stack when there are a lot of players */
+  flex: 0 0 auto;
+  overflow: hidden;
+  gap: 10px;
+  background: #1b2a42;
+  border: 4px solid #4d648a;
+  border-radius: 12px;
+  padding: 8px 10px;
+  cursor: pointer;
+  min-width: 0;
+}
+
+/* A hit lands on somebody: the whole entry flares and fades.  Loud on purpose - it is
+   the only feedback a player gets that the powerup they aimed went where they aimed it,
+   and it is being read out of the corner of an eye. */
+.gameclient .hitFlash {
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+  pointer-events: none;
+  background: #ff4d4d;
+  box-shadow: 0 0 24px 6px rgba(255, 77, 77, 0.9) inset;
+  animation: eittrisHitFlash 750ms ease-out forwards;
+}
+
+/* A shield ate it: green, so "I hit them" and "they shrugged it off" do not look alike */
+.gameclient .hitFlashRepelled {
+  background: #48e148;
+  box-shadow: 0 0 24px 6px rgba(72, 225, 72, 0.9) inset;
+}
+
+@keyframes eittrisHitFlash {
+  0% {
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.85;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.gameclient .targetCurrent {
+  border-color: #ff4d4d;
+  background: rgba(255, 77, 77, 0.15);
+}
+
+.gameclient .targetDead {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* Stacked so the name still reads in the narrower column beside the
+   larger board */
+.gameclient .targetInfo {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  font-size: 55%;
+  min-width: 0;
+}
+
+.gameclient .targetName {
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gameclient .targetTag {
+  color: #ff4d4d;
+  font-weight: 900;
+  font-size: 80%;
+}
+
+.gameclient .targetDeadTag {
+  color: #b8c4d8;
+  font-weight: 900;
+  font-size: 80%;
+}
+
+.gameclient .thumbCanvas {
+  image-rendering: pixelated;
+  width: 60px;
+  height: 126px;
+  border: 2px solid #4d648a;
+  background: #0a1220;
+  flex-shrink: 0;
+}
+
+/* ---- Win celebration ---- */
+
+.gameclient .celebration {
+  text-align: center;
+}
+
+.gameclient .celebrationTrophy {
+  font-size: 480px;
+  margin-top: 120px;
+  animation: trophyPulse 0.8s ease-in-out infinite alternate;
+}
+
+.gameclient .celebrationText {
+  font-size: 208px;
+  font-weight: 900;
+  color: #ffd34e;
+  animation: trophyPulse 0.8s ease-in-out infinite alternate-reverse;
+}
+
+@keyframes trophyPulse {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.15);
+  }
+}
+
+/* Marked blocks pulse so a special is easy to spot (see BoardGrid) */
+:global {
+  @keyframes eittrisSpecialPulse {
+    0% {
+      filter: brightness(1);
+    }
+    50% {
+      filter: brightness(1.9);
+    }
+    100% {
+      filter: brightness(1);
+    }
+  }
+}
+
+/* ---- Powerups ---- */
+
+.gameclient .powerRow {
+  display: flex;
+  align-items: flex-end; /* Next box sits flush with the antidote button */
+  gap: 20px;
+  margin-bottom: 12px;
+}
+
+.gameclient .antidoteButton {
+  display: flex;
+  align-items: center;
+  /* The charges sit centred in the button rather than ranged left, so the
+     row reads as a count instead of a label with something after it. */
+  justify-content: center;
+  gap: 12px;
+  font-size: 45%;
+  font-weight: 800;
+  margin: 0;
+  padding: 10px 20px;
+  background: #2a3b57;
+  border: 3px solid #4d648a;
+  border-radius: 12px;
+}
+
+.gameclient .antidoteReady {
+  background: #1d6b3a;
+  border-color: #48e148;
+}
+
+/* The earthquake button, lit.  A different colour from the antidote's green: the two sit
+   side by side and do completely different things, and under pressure a player is going by
+   colour rather than by reading either of them. */
+.gameclient .quakeReady {
+  background: #7a4310;
+  border-color: #ffa640;
+}
+
+/* The board shaking, which is the whole tell that something is about to happen to it.
+   Deliberately violent - it has to be unmistakable from the corner of an eye. */
+.gameclient .boardQuaking {
+  animation: eittrisQuake 90ms linear infinite;
+}
+
+@keyframes eittrisQuake {
+  0% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  25% {
+    transform: translate(-6px, 3px) rotate(-0.6deg);
+  }
+  50% {
+    transform: translate(5px, -4px) rotate(0.5deg);
+  }
+  75% {
+    transform: translate(-4px, -2px) rotate(0.4deg);
+  }
+  100% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+}
+
+.gameclient .antidoteButton:disabled {
+  opacity: 0.45;
+}
+
+.gameclient .specialIcon {
+  display: inline-block;
+  width: 44px;
+  height: 44px;
+  /* background-size is set inline from SPECIAL_ICON_COUNT - see BoardGrid and Client.tsx.
+     It lived here as a hardcoded 1700% and was wrong the moment an 18th icon was added. */
+  background-repeat: no-repeat;
+  flex-shrink: 0;
+}
+
+.gameclient .shieldTag {
+  font-size: 40%;
+  font-weight: 800;
+  color: #48e148;
+}
+
+.gameclient .devLabel {
+  font-size: 35%;
+  color: #b8c4d8;
+  margin-right: 10px;
+}
+
+.gameclient .devSelect {
+  font-size: 49%;
+  padding: 6px;
+}
+
+.gameclient .specialBanner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 42%;
+  font-weight: 800;
+  padding: 10px 16px;
+  margin-bottom: 12px;
+  border-radius: 12px;
+  background: #2a3b57;
+  border: 3px solid #4d648a;
+}
+
+.gameclient .specialBannerHit {
+  background: #6b1d1d;
+  border-color: #ff4d4d;
+}
+
+.gameclient .specialBannerRepel {
+  background: #1d6b3a;
+  border-color: #48e148;
+}
+
+/* ---- Fixed affliction/status strip ----
+   Always occupies the same height so the board and target list never move. */
+
+.gameclient .statusArea {
+  /* Fixed box (content can never resize it) - tuned with CELL_PX so the
+     grid's bottom edge lands 15px above the bottom of the screen */
+  height: 163px;
+  min-height: 163px;
+  max-height: 163px;
+  flex: 0 0 163px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 6px;
+  overflow: hidden;
+}
+
+.gameclient .afflictionRow,
+.gameclient .bannerRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 92px;
+  flex: 0 0 92px;
+  overflow: hidden;
+}
+
+.gameclient .afflictionChip {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 40%;
+  font-weight: 800;
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 3px solid #4d648a;
+  background: #2a3b57;
+}
+
+.gameclient .afflictionBad {
+  background: #6b1d1d;
+  border-color: #ff4d4d;
+}
+
+.gameclient .afflictionGood {
+  background: #1d6b3a;
+  border-color: #48e148;
+}
+
+.gameclient .nextLabel {
+  font-size: 38%;
+  font-weight: 800;
+  color: #b8c4d8;
+}
+
+.gameclient .devCheck {
+  font-size: 45%;
+  color: #b8c4d8;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 10px;
+}
+
+.gameclient .devButton {
+  font-size: 45%;
+  font-weight: 800;
+  padding: 4px 12px;
+  margin: 0 0 0 10px;
+  background: #6b1d1d;
+  border: 2px solid #ff4d4d;
+  border-radius: 8px;
+}
+
+.gameclient .devButton:disabled {
+  opacity: 0.4;
+  background: #2a3b57;
+  border-color: #4d648a;
+}
+
+/* Countdown bar on any status chip that has a clock.  It rides the chip's
+   bottom edge so a running timer never changes the chip's size, and it eases
+   over 1s - the rate at which the presenter re-sends a ticking board. */
+.gameclient .chipSeconds {
+  opacity: 0.85;
+  font-variant-numeric: tabular-nums;
+}
+
+.gameclient .chipTimerTrack {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 8px;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.gameclient .chipTimerBar {
+  display: block;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.85);
+  transition: width 1s linear;
+}
+
+/* ---- Keyboard / controller hints ----
+   Only rendered on a device where they apply (see IS_DESKTOP / hasGamepad),
+   so a phone never spends space on keys it does not have. */
+/* ---- The controls, explained on the waiting screen ---- */
+
+.gameclient .controlsHelp {
+  margin-top: 18px;
+  text-align: left;
+}
+.gameclient .controlsTitle {
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+.gameclient .controlChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+/* Chips are big enough to hit with a thumb without looking - this screen is
+   read while the host is still fiddling with settings. */
+.gameclient .controlChip {
+  background: #2a3d5c;
+  color: #dbe7f5;
+  border: 2px solid #4d648a;
+  border-radius: 999px;
+  padding: 8px 20px;
+  font-size: 100%;
+  font-family: inherit;
+  cursor: pointer;
+}
+.gameclient .controlChipOpen {
+  background: #4d76b8;
+  border-color: #9fc4ff;
+  color: white;
+}
+.gameclient .controlSummary {
+  color: #9fb2cc;
+  font-size: 85%;
+  margin-top: 10px;
+}
+.gameclient .controlDetail {
+  margin-top: 10px;
+}
+
+/* The seats at a shared keyboard.  Smaller than the chips above them, because they are a
+   choice WITHIN a choice - and one of them is always on, so they never read as a dead end. */
+.gameclient .layoutChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0;
+}
+.gameclient .layoutChip {
+  background: #14203a;
+  color: #b8c4d8;
+  border: 2px solid #35486a;
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 80%;
+  font-family: inherit;
+  margin: 0;
+  cursor: pointer;
+}
+.gameclient .layoutChipOn {
+  background: #4d76b8;
+  border-color: #9fc4ff;
+  color: white;
+}
+.gameclient .controlEntry {
+  display: flex;
+  gap: 12px;
+  padding: 4px 0;
+  align-items: baseline;
+}
+.gameclient .controlKey {
+  color: #ffe9a8;
+  font-weight: 700;
+  flex: 0 0 42%;
+}
+.gameclient .controlWhat {
+  color: #dbe7f5;
+  flex: 1 1 auto;
+}
+
+/* Antidote charges: one icon each, centred, 30% larger than the old inline
+   icon - they are the thing you reach for under pressure. */
+.gameclient .antidoteIcon {
+  display: inline-block;
+  width: 57px;
+  height: 57px;
+  background-repeat: no-repeat;
+  flex: 0 0 auto;
+}
+.gameclient .antidoteEmpty {
+  opacity: 0.5;
+}
+
+/* The wordmark scales itself to the shared header's 360px title region now - see
+   libs/components/ClientHeader.module.css. It used to carry an explicit width here, back when
+   the strip was a flex negotiation and the logo had to be sized against everything else in
+   the row by hand. */

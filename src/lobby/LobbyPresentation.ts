@@ -35,7 +35,17 @@ export const TILE_PALETTE = [
 ];
 
 // The category chips shown on the presenter. "All" is the default filter.
-export const CATEGORIES = ["All", "Trivia", "Drawing", "Party", "Word", "Bluff", "Music"];
+export const CATEGORIES = [
+  "All",
+  "Trivia",
+  "Drawing",
+  "Party",
+  "Puzzle",
+  "Word",
+  "Bluff",
+  "Music",
+  "Productivity",
+];
 
 // The animated thumbnail shown on each game tile (see GameThumbnail). A small
 // set of themed loops; games map to the one that best evokes them, and anything
@@ -91,7 +101,7 @@ const KNOWN: Record<string, Partial<GamePresentation>> = {
     thumbKind: "letters",
   },
   RetroSpectro: {
-    category: "Party",
+    category: "Productivity",
     blurb: "Toss out hot takes, then sort the room's reactions into agree and disagree.",
     players: "3–10",
     playTime: "20m",
@@ -109,6 +119,21 @@ const KNOWN: Record<string, Partial<GamePresentation>> = {
     blurb: "The bare-bones template game used as the starting point for new games.",
     players: "1–8",
     playTime: "5m",
+    thumbKind: "bars",
+  },
+  OneOhOne: {
+    category: "Puzzle",
+    blurb: "Race to land exactly on 101 — unique picks surge ahead, collisions knock you back.",
+    players: "1–16",
+    playTime: "10m",
+    thumbKind: "bars",
+  },
+  Eittris: {
+    category: "Puzzle",
+    blurb:
+      "Frenetic block-stacking battle: everyone runs a board from their phone — last one standing wins.",
+    players: "2–16",
+    playTime: "10m",
     thumbKind: "bars",
   },
 };

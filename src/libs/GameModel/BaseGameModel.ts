@@ -7,6 +7,10 @@ import {
   BaseAnimationController,
   BruteForceSerializer,
 } from "../../libs";
+import { GameAnalytics } from "../telemetry/GameAnalytics";
+import { AnalyticsEntity } from "../telemetry/AnalyticsTypes";
+import { getDeviceId } from "../telemetry/DeviceId";
+import { configureErrorReporter, reportError } from "../telemetry/ErrorReporter";
 
 import { action, makeObservable, observable } from "mobx";
 import Logger from "js-logger";
@@ -54,8 +58,18 @@ export function instantiateGame<T extends BaseGameModel>(
       }
     }
   } catch (err) {
+    // A failed restore is not a small thing: from the room's point of view the
+    // host refreshed and the party started over, with no error and no cause.
+    // It used to be logged and swallowed, so nobody ever found out it had
+    // happened - report it, then carry on with a fresh game, which is still
+    // the only sensible thing to do next.
     logger.logEvent("Error", "Failed Game Restore", (err as any).message);
     Logger.error(`getSavedGame: Could not restore game because: `, err);
+    reportError(
+      "window",
+      err instanceof Error ? err : new Error(String(err)),
+      "checkpoint restore failed - starting a fresh game",
+    );
   }
 
   const gameTypeName = typeHelper.rootTypeName;
@@ -107,6 +121,8 @@ function createSerializer(typeHelper: ITypeHelper) {
           case "_lastCheckpointTime":
           case "_isShutdown":
           case "telemetryLogger":
+          case "_analytics":
+          case "endReason":
           case "onTick":
           case "serializer":
           case "session":
@@ -127,6 +143,9 @@ function createSerializer(typeHelper: ITypeHelper) {
 // -------------------------------------------------------------------
 // Handle basic operations for any game instance, client or presenter
 // -------------------------------------------------------------------
+// How a game finished, from this device's point of view
+export type GameEndReason = "unknown" | "quit" | "hostEnded" | "terminated";
+
 export abstract class BaseGameModel {
   name: string;
   @observable private _gameTime_ms = 0;
@@ -188,9 +207,58 @@ export abstract class BaseGameModel {
     })();
   }
 
+  // Why the game ended.  The lobby needs to tell "I pressed Quit" apart from
+  // "the host ended the game": one should hand the player back their lobby
+  // exactly as they left it, the other should retire a room code that is now
+  // dead.  Not checkpointed - it only matters for the trip back to the lobby.
+  public endReason: GameEndReason = "unknown";
+
   public session: ISessionHelper;
   protected telemetryLogger: ITelemetryLogger;
   protected storage: IStorage;
+
+  // -------------------------------------------------------------------
+  // analytics - the reporter game code uses:
+  //
+  //     this.analytics.track("word_played", { length: 7 });
+  //
+  // It stamps the game name, this browser's device id, and whether we are the
+  // host or a client onto every event, so a game author never has to.  The
+  // lifecycle events (game started/ended, joins, rejoins) are fired by the
+  // presenter and client base classes - a game gets those for free.
+  //
+  // Built on first use rather than in the constructor: subclasses decide the
+  // entity, and a restored model must not touch storage while deserializing.
+  // -------------------------------------------------------------------
+  private _analytics?: GameAnalytics;
+  public get analytics(): GameAnalytics {
+    if (!this._analytics) {
+      this._analytics = new GameAnalytics(this.telemetryLogger, {
+        game: this.analyticsGameName,
+        deviceId: getDeviceId(this.storage),
+        entity: this.analyticsEntity,
+      });
+      // Point crash reporting at this game.  The app shell arms the reporter
+      // at startup so nothing is ever lost, but once a game is running its
+      // channel is the better one: an error then arrives tagged with the game
+      // and with host-vs-phone, which is most of what makes it actionable.
+      configureErrorReporter(this._analytics);
+    }
+    return this._analytics;
+  }
+
+  // Overridden by the presenter (host) and client base classes
+  protected get analyticsEntity(): AnalyticsEntity {
+    return "client";
+  }
+
+  // The game these events belong to.  Client models are named "<Game>Client"
+  // by convention (every game in the repo does this), and a host and its
+  // phones MUST report the same game name or every by-game report splits in
+  // two.  Override if a game names its models some other way.
+  protected get analyticsGameName(): string {
+    return this.name.replace(/Client$/, "");
+  }
 
   public onTick = new EventThing<number>("BaseGameModel");
   private _scheduledEvents: Map<number, Array<() => void>>;
@@ -242,8 +310,20 @@ export abstract class BaseGameModel {
     let timeOfLastTick = Date.now();
     this._ticker = setInterval(() => {
       const now = Date.now();
-      this.tick(now - timeOfLastTick);
-      timeOfLastTick = now;
+      // The clock has to advance even if the tick throws.  Without the
+      // finally, one exception in game logic means timeOfLastTick is never
+      // updated, so every following tick reports a bigger delta than the
+      // last - the game clock runs away at hundreds of times real speed and
+      // the freeze looks nothing like the bug that caused it.
+      try {
+        this.tick(now - timeOfLastTick);
+      } catch (err) {
+        // Swallowing this would hide it completely: the ticker is a bare
+        // setInterval, so nothing else is going to report it.
+        Logger.error(`Error in game tick: ${err}`);
+      } finally {
+        timeOfLastTick = now;
+      }
     }, this.tickInterval_ms);
 
     this.telemetryLogger.logPageView(this.name);
@@ -254,6 +334,9 @@ export abstract class BaseGameModel {
   // -------------------------------------------------------------------
   quitApp = () => {
     Logger.info("Quitting the app");
+    // Only the FIRST reason sticks: handleTerminateGameMessage calls through
+    // here, and "the host closed the room" is the truer answer than "I quit".
+    if (this.endReason === "unknown") this.endReason = "quit";
     this.gameState = GeneralGameState.Destroyed;
     this.storage.remove(GAMESTATE_LABEL);
     this.shutdown();

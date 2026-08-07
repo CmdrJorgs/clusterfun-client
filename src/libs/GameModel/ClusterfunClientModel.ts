@@ -1,4 +1,5 @@
 import { ITypeHelper, ISessionHelper, ITelemetryLogger, IStorage } from "../../libs";
+import { AnalyticsEntity } from "../telemetry/AnalyticsTypes";
 import { makeObservable, observable } from "mobx";
 import { BaseGameModel, GeneralGameState } from "./BaseGameModel";
 import Logger from "js-logger";
@@ -44,18 +45,40 @@ export const getClientTypeHelper = (derivedClassHelper: ITypeHelper): ITypeHelpe
 // Client data and logic
 // -------------------------------------------------------------------
 export abstract class ClusterfunClientModel extends BaseGameModel {
+  protected get analyticsEntity(): AnalyticsEntity {
+    return "client";
+  }
+
   @observable private _playerName: string;
   get playerName() {
     return this._playerName;
   }
+  // The permanent name of our seat, handed to us by the host in the join
+  // ack.  Empty until that lands.
+  private _assignedPlayerId: string = "";
+
+  // Who we are as far as the GAME is concerned - stable across reconnects.
+  //
+  // Deliberately not `session.personalId`: that is the relay connection,
+  // and it is a different value every time this phone comes back.  Anything
+  // the host broadcasts about us - a roster entry, an attack target, a
+  // scoreboard row - is keyed by this, so comparing against the connection
+  // id would silently stop matching the moment we reconnect.
+  //
+  // Falls back to the connection id for the brief window before the ack
+  // arrives, and for a host talking to itself.
   get playerId() {
-    return this.session.personalId;
+    return this._assignedPlayerId || this.session.personalId;
   }
   @observable joinError: string | null = null;
   @observable roundNumber: number = 0;
   // The avatar mark this player picked in the lobby (see PlayerAvatar).
   // Set by the framework before reconstitute() so it rides the Join message.
   @observable avatarId: number = 0;
+  @observable avatarColor: number = 0;
+  // The private id this device reconnects with.  Set by the lobby; never shown
+  // and never checkpointed alongside game state - it belongs to the browser.
+  playerToken: string = "";
   gameTerminated = false;
   private _stateIsInvalid = true;
 
@@ -94,7 +117,12 @@ export abstract class ClusterfunClientModel extends BaseGameModel {
 
     this.gameState = GeneralClientGameState.WaitingToStart;
     this.session
-      .requestPresenter(JoinEndpoint, { playerName: this._playerName, avatarId: this.avatarId })
+      .requestPresenter(JoinEndpoint, {
+        playerName: this._playerName,
+        avatarId: this.avatarId,
+        avatarColor: this.avatarColor,
+        playerToken: this.playerToken,
+      })
       .then((ack) => {
         this.handleJoinAck(ack);
         this._stateIsInvalid = true;
@@ -130,15 +158,29 @@ export abstract class ClusterfunClientModel extends BaseGameModel {
   // -------------------------------------------------------------------
   // handleJoinAckMessage
   // -------------------------------------------------------------------
-  handleJoinAck = (message: { isRejoin: boolean; didJoin: boolean; joinError?: string }) => {
+  handleJoinAck = (message: {
+    isRejoin: boolean;
+    didJoin: boolean;
+    joinError?: string;
+    playerId?: string;
+  }) => {
+    // Take the seat name the host gave us before anything else looks at
+    // playerId - every "is this about me?" check downstream depends on it.
+    if (message.playerId) this._assignedPlayerId = message.playerId;
+    // The host reports the authoritative join/rejoin counts; this is the same
+    // moment seen from the phone, tagged entity=client.  Filter on entity when
+    // reading the reports, or a two-player game looks like four joins.
     if (!message.didJoin) {
+      this.analytics.joinDenied(message.joinError ?? "unknown");
       this.joinError = message.joinError ?? "Unknown reason";
       this.gameState = GeneralClientGameState.JoinError;
     } else if (!message.isRejoin) {
+      this.analytics.playerJoined(1);
       this.clearCheckpoint();
       this.gameState = GeneralClientGameState.WaitingToStart;
     } else {
       Logger.info("Rejoining...");
+      this.analytics.playerRejoined(1, "id");
       this.unStashCheckpoint();
       this.gameState = GeneralClientGameState.WaitingToStart;
     }
@@ -158,6 +200,7 @@ export abstract class ClusterfunClientModel extends BaseGameModel {
   //
   // -------------------------------------------------------------------
   handleGameOverMessage = (message: unknown) => {
+    this.endReason = "hostEnded";
     this.gameState = GeneralGameState.GameOver;
     this.saveCheckpoint();
     return {};
@@ -168,6 +211,7 @@ export abstract class ClusterfunClientModel extends BaseGameModel {
   // -------------------------------------------------------------------
   handleTerminateGameMessage = (message: unknown) => {
     Logger.info("Presenter has terminated the game");
+    this.endReason = "terminated";
     this.gameTerminated = true;
     this.quitApp();
     return {};

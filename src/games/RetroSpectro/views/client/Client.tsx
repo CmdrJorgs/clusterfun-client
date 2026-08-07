@@ -1,3 +1,4 @@
+import { RETROSPECTRO_VERSION_HISTORY } from "../../models/GameSettings";
 // App Navigation handled here
 import React from "react";
 import { observer, inject } from "mobx-react";
@@ -6,7 +7,13 @@ import {
   RetroSpectroClientModel,
   RetroSpectroClientState,
 } from "../../models/ClientModel";
-import { UIProperties, ScaleToWidth, GeneralGameState, GeneralClientGameState } from "libs";
+import {
+  UIProperties,
+  UINormalizer,
+  GeneralGameState,
+  GeneralClientGameState,
+  ClientHeader,
+} from "libs";
 import styles from "./Client.module.css";
 import { ErrorBoundary } from "libs/components/ErrorBoundary";
 import { SafeBrowser } from "libs/Browser/SafeBrowser";
@@ -168,13 +175,15 @@ export default class Client extends React.Component<{
           fillHeight
         >
           <div className={styles.gameclient}>
-            <div className={styles.topbar}>
-              <span className={styles.gametitle}>RetroSpectro</span>
-              <span className={styles.playerName}>{appModel.playerName}</span>
-              <button className={styles.quitbutton} onClick={() => appModel.quitApp()}>
-                ✕
-              </button>
-            </div>
+            <ClientHeader
+              className={styles.topbar}
+              title="RetroSpectro"
+              history={RETROSPECTRO_VERSION_HISTORY}
+              avatarId={appModel.avatarId ?? 0}
+              avatarColor={appModel.avatarColor}
+              playerName={appModel.playerName}
+              onQuit={() => appModel.quitApp()}
+            />
             <div className={styles.content}>
               <ErrorBoundary>{this.renderSubScreen()}</ErrorBoundary>
             </div>

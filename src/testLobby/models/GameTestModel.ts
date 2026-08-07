@@ -407,7 +407,7 @@ export class GameTestModel {
       this.clientModels.forEach((m) => (m.roomId = gameProperties.roomId));
       this.saveState();
       return Promise.resolve(gameProperties as unknown as T);
-    } else if (url === "/api/am_i_healthy") {
+    } else if (url === "/api/am_i_healthy" || url === "/api/health_data") {
       const healthdata = {
         version: "99.99.99",
         uptime: "0 00:04:37",
@@ -451,20 +451,6 @@ export class GameTestModel {
               count: 12,
               sum: 0,
             },
-          },
-        ],
-        series: [
-          {
-            date: 1667319600000,
-            columns: [
-              {
-                label: "GetRequest_ROOT",
-                data: {
-                  count: 1,
-                  sum: 0,
-                },
-              },
-            ],
           },
         ],
         cpuUsage: {
@@ -516,11 +502,26 @@ export class GameTestModel {
   // -------------------------------------------------------------------
   // loadState
   // -------------------------------------------------------------------
+  // Restore the backing fields directly rather than through the setters.
+  //
+  // Object.assign walked the saved keys in order, and `presenterSize` comes
+  // first - but its setter calls saveState(), which wrote the state back out
+  // while `_gameName` was still "" and `joinCount` still 0, erasing both
+  // before Object.assign had reached them.  The game name was therefore lost
+  // on every reload, and the next client to join the Test Lobby was sent to a
+  // game called "" and greeted with "Could not find game ''".
   loadState() {
     const stateJson = this._storage.get("testState");
-    if (stateJson) {
-      const loadedState = JSON.parse(stateJson);
-      Object.assign(this, loadedState);
-    }
+    if (!stateJson) return;
+    const loaded = JSON.parse(stateJson) as Partial<{
+      presenterSize: number;
+      gameName: string;
+      joinCount: number;
+    }>;
+    action(() => {
+      if (typeof loaded.presenterSize === "number") this._presenterSize = loaded.presenterSize;
+      if (typeof loaded.gameName === "string") this._gameName = loaded.gameName;
+      if (typeof loaded.joinCount === "number") this.joinCount = loaded.joinCount;
+    })();
   }
 }

@@ -1,3 +1,4 @@
+import { LEXIBLE_VERSION_HISTORY } from "../models/GameSettings";
 // App Navigation handled here
 import React from "react";
 import { observer, inject } from "mobx-react";
@@ -13,10 +14,11 @@ import {
   ScaleToWidth,
   ErrorBoundary,
   Row,
+  ClientHeader,
 } from "libs";
 import LexibleClientGameComponent from "./ClientGameComponent";
 import { InstructionDemo } from "./InstructionDemo";
-import { COZY, teamColor } from "./cozyTheme";
+import { COZY, teamColor, mixWithWhite } from "./cozyTheme";
 
 interface InstructionsComponentProps {
   appModel?: LexibleClientModel;
@@ -57,25 +59,28 @@ class InstructionsComponent extends React.Component<InstructionsComponentProps> 
         <p>
           <b>How to play</b>
         </p>
+        {/* Rule on the LEFT, the board doing it on the RIGHT.  The caption is short
+            enough to live in a narrow column, which buys the animation the width it
+            needs to be watched rather than squinted at. */}
         <div className={styles.instructionsRow}>
-          <p>
-            1. Claim tiles by spelling a word with adjacent letters. Tiles you claim will get a
-            point value equal to the length of the word.
+          <p className={styles.instructionParagraph}>
+            1. Claim tiles by finding words, starting from your team's territory.
           </p>
-          <InstructionDemo step={1} size={64} />
+          <InstructionDemo step={1} size={66} />
         </div>
         <div className={styles.instructionsRow}>
-          <p>
-            2. You can claim the other team's tiles, but make sure your word is long enough! If the
-            word is not longer than a tile's score, it will not be claimed.
+          <p className={styles.instructionParagraph}>
+            2. Capture tiles if your word score is bigger than the letter score.
           </p>
-          <InstructionDemo step={2} size={64} />
+          <InstructionDemo step={2} size={66} />
         </div>
-        <p>
-          3. TO WIN: Build a bridge of tiles that connect your team's side to the other side of the
-          grid.{" "}
-        </p>
-        <InstructionDemo step={3} size={70} />
+        <div className={styles.instructionsRow}>
+          <p className={styles.instructionParagraph}>
+            3. To win, be the first team to build a bridge to the other side! Tiles connect only if
+            they share a side.
+          </p>
+          <InstructionDemo step={3} size={66} />
+        </div>
       </div>
     );
   }
@@ -189,10 +194,15 @@ export default class Client extends React.Component<{
       this.uiState.mouseScale = 0.5 / scale;
     };
 
-    // Keep the page cream so the tiles read well; the team color is used only
-    // as a slim accent (the top bar's top border + the team pill dot).
-    const pageBackground = COZY.bg;
+    // The whole phone wears the team's colour.  Which team you are on is the
+    // thing you most need to keep straight while playing - it decides which
+    // letters you may start from and which tiles are worth taking - and a slim
+    // accent stripe was easy to miss on a device you glance at.  The page is a
+    // pale wash of the colour rather than the colour itself, so the tiles and
+    // the text on top of it keep their contrast.
+    const onATeam = appModel.myTeam === "A" || appModel.myTeam === "B";
     const teamAccent = teamColor(appModel.myTeam ?? "");
+    const pageBackground = onATeam ? mixWithWhite(teamAccent, 0.22) : COZY.bg;
 
     return (
       <div style={{ background: pageBackground }}>
@@ -206,16 +216,33 @@ export default class Client extends React.Component<{
           onScaleCalc={reportScale}
         >
           <div className={styles.gameclient} style={{ background: pageBackground }}>
-            <div
-              className={classNames(styles.divRow, styles.topbar)}
-              style={{ borderTop: `8px solid ${teamAccent}` }}
-            >
-              <span className={classNames(styles.gametitle)}>Lexible</span>
-              <span>{appModel.playerName}</span>
-              <button className={classNames(styles.quitbutton)} onClick={() => appModel.quitApp()}>
-                X
-              </button>
-            </div>
+            {/* The shared strip every game uses, so the quit button is in the same place
+                whichever game you are playing. Lexible's own contribution is the team, which
+                is the one fact a player has to keep straight while playing. */}
+            <ClientHeader
+              className={styles.topbar}
+              // The team accent is an INSET SHADOW, not a border. A border shrinks the
+              // strip's content box, and the header's regions are a fixed 120px measured
+              // against it - with a border the quit button lost 4px of its 10px inset and
+              // the team chip was clipped at the bottom.
+              style={
+                onATeam
+                  ? {
+                      background: teamAccent,
+                      color: "#fff",
+                      boxShadow: `inset 0 8px 0 ${teamAccent}`,
+                    }
+                  : { boxShadow: `inset 0 8px 0 ${teamAccent}` }
+              }
+              title="Lexible"
+              history={LEXIBLE_VERSION_HISTORY}
+              team={onATeam ? `TEAM ${appModel.myTeam}` : undefined}
+              teamColor="rgba(255,255,255,0.28)"
+              avatarId={appModel.avatarId}
+              avatarColor={appModel.avatarColor}
+              playerName={appModel.playerName}
+              onQuit={() => appModel.quitApp()}
+            />
             <ErrorBoundary>{this.renderSubScreen()}</ErrorBoundary>
           </div>
         </ScaleToWidth>

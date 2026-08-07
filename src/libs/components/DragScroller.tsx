@@ -1,0 +1,116 @@
+import React from "react";
+
+// -------------------------------------------------------------------
+// DragScroller - a scroll container you can drag with a finger (or the
+// mouse) instead of hunting for a scrollbar.  Used wherever a list is
+// longer than the phone it is being read on: the lobby's avatar picker,
+// EITtris' target list.
+//
+// A drag that moves more than a few pixels suppresses the click on the
+// child underneath, so scrolling past a button doesn't select it - which
+// is the whole difficulty with a list of things you can also tap.
+// -------------------------------------------------------------------
+export class DragScroller extends React.Component<{
+  className?: string;
+  style?: React.CSSProperties;
+  children?: React.ReactNode;
+  /** Fires whenever the scroll position changes, including from a drag. */
+  onScroll?: (position: { scrollLeft: number; scrollTop: number; atEnd: boolean }) => void;
+}> {
+  private ref = React.createRef<HTMLDivElement>();
+  private dragging = false;
+  private moved = false;
+  private startX = 0;
+  private startY = 0;
+  private startLeft = 0;
+  private startTop = 0;
+
+  private onPointerDown = (e: React.PointerEvent) => {
+    const el = this.ref.current;
+    if (!el) return;
+    this.dragging = true;
+    this.moved = false;
+    this.startX = e.clientX;
+    this.startY = e.clientY;
+    this.startLeft = el.scrollLeft;
+    this.startTop = el.scrollTop;
+  };
+
+  private onPointerMove = (e: React.PointerEvent) => {
+    const el = this.ref.current;
+    if (!el || !this.dragging) return;
+    const dx = e.clientX - this.startX;
+    const dy = e.clientY - this.startY;
+    if (!this.moved && Math.hypot(dx, dy) > 6) {
+      this.moved = true;
+      // Take the pointer once we know it's a scroll, not a tap
+      try {
+        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      } catch {
+        /* capture is best-effort */
+      }
+    }
+    if (this.moved) {
+      el.scrollLeft = this.startLeft - dx;
+      el.scrollTop = this.startTop - dy;
+      this.report();
+    }
+  };
+
+  componentDidMount() {
+    // Report once on mount so an indicator knows whether there is anything to scroll to
+    // before the user has touched it.
+    this.report();
+  }
+
+  componentDidUpdate() {
+    this.report();
+  }
+
+  // A drag moves scrollLeft/scrollTop directly, which fires no scroll event in some
+  // browsers, so the position is reported from here as well as from onScroll.
+  private report = () => {
+    const el = this.ref.current;
+    if (!el || !this.props.onScroll) return;
+    const overflowX = el.scrollWidth - el.clientWidth;
+    const overflowY = el.scrollHeight - el.clientHeight;
+    // One pixel of slack: fractional layout means an exact equality never quite holds.
+    const atEnd =
+      (overflowX <= 1 || el.scrollLeft >= overflowX - 1) &&
+      (overflowY <= 1 || el.scrollTop >= overflowY - 1);
+    this.props.onScroll({ scrollLeft: el.scrollLeft, scrollTop: el.scrollTop, atEnd });
+  };
+
+  private endDrag = () => {
+    this.dragging = false;
+  };
+
+  // Swallow the click that ends a drag so it doesn't hit a child button
+  private onClickCapture = (e: React.MouseEvent) => {
+    if (this.moved) {
+      e.preventDefault();
+      e.stopPropagation();
+      this.moved = false;
+    }
+  };
+
+  render() {
+    return (
+      <div
+        ref={this.ref}
+        className={this.props.className}
+        style={{ touchAction: "pan-x pan-y", cursor: "grab", ...this.props.style }}
+        onPointerDown={this.onPointerDown}
+        onPointerMove={this.onPointerMove}
+        onPointerUp={this.endDrag}
+        onPointerCancel={this.endDrag}
+        onClickCapture={this.onClickCapture}
+        onScroll={this.report}
+      >
+        {this.props.children}
+      </div>
+    );
+  }
+}
+
+export default DragScroller;

@@ -2,7 +2,7 @@
 
 A ClusterFun game (presenter + client on one shared module). Read [DESIGN.md](DESIGN.md) first for
 the product flow, economy, and visual spec; this file is how the code implements it. Built from the
-`TestGame` template (since renamed to `TemplateGame`).
+template now called `TemplateGame`.
 
 ## The loop
 
@@ -111,6 +111,80 @@ alongside `photos`.
 with mirrored `@observable` counts (`up`/`down`/`deleteCount`) updated via `syncCounts()` so the
 presenter's live tally re-renders. All model mutations run inside `action(() => …)()`.
 
+## The phone is ONE screen
+
+Taking part on top, what is on the big screen below. It used to be two tabs, and whichever
+one you were looking at hid the other — a player on Capture never saw the photo they were
+meant to be voting on, and a player on Vote had to go looking for the shutter.
+
+**Two file inputs, not one.** `capture` is not a flag you can flip at click time; the
+attribute has to be on the element when it is activated. One input with `capture="environment"`
+is what shipped, which on a phone forces the camera and offers no album at all — and on a
+desktop the attribute is ignored, which is why it looked fine in the Test Lobby. There are now
+two hidden inputs behind two buttons, **Take a Photo** and **Upload a photo**.
+
+**The phone re-syncs when it comes back to the foreground.** Taking a photo hands the whole
+screen to another app: the browser is suspended, sockets close, pushes are missed, and on a
+memory-tight device the page can be discarded. PartyPix is the game in the set that routinely
+sends a player away and expects them back, so its client listens for `visibilitychange` and
+re-onboards rather than trusting what it was holding when it went away.
+
+**One text size, and a floor.** `--pp-text` (52px) on `.gameclient`, taken from the shutter
+button, which was the only thing on the phone already set large enough to read at arm's length.
+The wordmark is a quarter larger. **`--pp-min` is 40px and nothing on this screen goes below
+it** — the labels that were unreadable were the 24s and 26s, and a floor is the only rule that
+stops them drifting back. 40 is also the version size in the shared header's corner, which is
+pinned for every game via `--gvt-version-size` (see `libs/components/ClientHeader.module.css`).
+
+**Three fixed bands, not a scrolling column** (`.body`):
+
+| Band          | Height | Holds                                              |
+| ------------- | ------ | -------------------------------------------------- |
+| header        | 120    | The shared `ClientHeader`.                         |
+| `.topZone`    | 400    | Credits, and the two ways to add a picture.        |
+| `.photoZone`  | rest   | **The picture**, 5px of air, plus the flag button. |
+| `.bottomZone` | 300    | Whose picture it is, and the vote controls.        |
+
+The picture is `width: 100%; height: 100%; object-fit: contain` — **both** dimensions, not a
+pair of maximums: the phone only ever receives the ~256px thumbnail, so maximums alone would
+draw it at 256px in the middle of a thousand-pixel band. It scales up, which means it is soft;
+that is the cost of not shipping the full image to every phone.
+
+Everything shared one scrolling column before this, so the picture got whatever height was left
+over and the vote buttons could land below the fold — on the screen whose whole job is looking
+at a photo and deciding what you think of it.
+
+**Reviewing a shot is an overlay** over all three bands (`.reviewOverlay`), because "is this the
+picture?" needs the screen and does not fit in the 400px band the shutter lives in.
+
+**Flagging is two steps.** The flag sits in the picture's own upper-right corner, in red, where
+a thumb reaches it — which is exactly where a mis-tap lands too, and the first flag pulls a
+photo out of rotation for everybody. So the button only STAGES it, and a **confirmation dialog
+opens over the picture** (**Yes, Flag** / **Whoops, No**). It says "⚑ Flag", not a bare pennant:
+the one control that removes a photo from the whole room's show should not rely on a symbol
+nobody has seen before.
+
+`pendingFlag` is a single value, not a list — the dialog is answered before another can be
+staged. It carries its own thumbnail and author name and **outlives a slide change**, because
+the show rotates every few seconds and a confirmation that vanished mid-decision would be worse
+than one that keeps showing what it is about. Local, never sent, never checkpointed.
+
+## Notices — moments, not numbers
+
+`PartyPixNoticeEndpoint` (presenter → one player, via `sendToPlayer`) covers three things that
+HAPPEN rather than three numbers that change: **your photo was flagged**, **your first upvote**,
+and **the whole room upvoted one of yours** (`up === players.length - 1`, since an author cannot
+vote on their own). Every one of them explains the credit economy, because "why can I not take
+another photo" is the question the game otherwise never answers out loud.
+
+## The photo folder is not optional any more
+
+The setup screen will not hand over to the slideshow until `folderDecided` — the host has
+picked a folder, or the browser has no File System Access API at all (`"unsupported"`, where
+there is nothing to pick and blocking would be careless rather than careful). Photos live in
+that folder: start without one and the party's pictures exist only in the presenter tab, and
+the first refresh takes them all.
+
 ## State machine
 
 - Presenter: `Gathering` (join screen / 0 photos) → `Slideshow` on first upload → back to
@@ -122,12 +196,24 @@ presenter's live tally re-renders. All model mutations run inside `action(() => 
 ## Running / testing
 
 - Dev Test Lobby: `npm start` → pick **PartyPix**. On desktop the camera input becomes a file
-  picker, so you can test the whole loop without a phone. PartyPix is registered in the **debug**
-  game list (`gamesListDebug.ts`), so it's dev-only until added to the server manifest + release list.
+  picker, so you can test the whole loop without a phone. **PartyPix ships** — it is in
+  `gamesListRelease.ts` and in the server manifest. (Note the manifest tags it `"alpha"` while
+  the client tags it with nothing, and the server's tags win in production.)
 - Tests: `npm test`. Pure rules in `partyPixLogic.spec.ts`; image fit in `imageUtil.spec.ts`.
 
 ## Known limitations (tracked, non-blocking for the MVP)
 
+- ~~**Reconnect mis-attributes photos**~~ — **fixed.** `photo.authorId` is a stored `playerId`,
+  and player ids are permanent now, so authorship, credits and `youAuthored` all survive a
+  phone going to sleep and coming back. See the lifecycle contract in
+  [../../../CLAUDE.md](../../../CLAUDE.md).
+- **`photos` is unbounded.** Each `PartyPixPhoto` holds a ~133 KB base64 `full` plus a thumb,
+  `flaggedPhotos` retains removed ones, and nothing evicts. At `maxPlayers = 50`, an ordinary
+  hour (~150 photos) is ~20 MB of strings on the presenter plus decoded bitmaps. Correctly
+  excluded from the checkpoint, but not from memory.
+- **`SlidePush` is O(N²) on the wire.** A ~10 KB per-recipient thumb goes to every player on
+  every slide change, every 6 s. At 20 players that is ~200 KB per 6 s each way through the Pi,
+  sustained.
 - **Moderation state is session-only.** `flaggedPhotos`, `approved`, and `bannedHashes` are not
   persisted. With a disk folder connected, a **flagged photo can reappear in rotation after a
   presenter refresh**: `pullToFlagged` doesn't hide its file, so `loadPhotosFromDisk` reloads it into

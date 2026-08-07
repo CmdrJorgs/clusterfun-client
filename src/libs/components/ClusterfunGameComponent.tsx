@@ -14,6 +14,7 @@ import {
   ITelemetryLogger,
 } from "../../libs";
 import { UIProperties } from "libs/types/UIProperties";
+import { GameEndReason } from "libs/GameModel/BaseGameModel";
 import { observer, Provider } from "mobx-react";
 import React from "react";
 import Logger from "js-logger";
@@ -24,12 +25,14 @@ import Logger from "js-logger";
 export interface ClusterFunGameProps {
   playerName?: string;
   avatarId?: number;
+  avatarColor?: number;
   gameProperties: GameInstanceProperties;
   uiProperties: UIProperties;
   messageThing: IMessageThing;
   logger: ITelemetryLogger;
   storage: IStorage;
-  onGameEnded: () => void;
+  onGameEnded: (reason?: GameEndReason) => void;
+  playerToken?: string;
   serverCall: <T>(url: string, payload: any) => Promise<T>;
 }
 
@@ -95,6 +98,12 @@ export class ClusterfunGameComponent extends React.Component<ClusterFunGameProps
       if (this.props.avatarId !== undefined) {
         (this.appModel as ClusterfunClientModel).avatarId = this.props.avatarId;
       }
+      if (this.props.avatarColor !== undefined) {
+        (this.appModel as ClusterfunClientModel).avatarColor = this.props.avatarColor;
+      }
+      if (this.props.playerToken) {
+        (this.appModel as ClusterfunClientModel).playerToken = this.props.playerToken;
+      }
     }
 
     document.title = `${gameProperties.gameName} / ClusterFun.tv`;
@@ -103,7 +112,7 @@ export class ClusterfunGameComponent extends React.Component<ClusterFunGameProps
 
   componentDidMount(): void {
     this.appModel!.subscribe(GeneralGameState.Destroyed, "GameOverCleanup", () =>
-      this.props.onGameEnded(),
+      this.props.onGameEnded(this.appModel!.endReason),
     );
     this.appModel!.reconstitute();
   }

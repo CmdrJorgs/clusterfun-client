@@ -11,3 +11,6 @@ export * from "./Slider";
 export * from "./Touchable";
 export * from "./UINormalizer";
 export * from "./URLSearchParams";
+export * from "./DragScroller";
+export * from "./GameVersionTag";
+export * from "./ClientHeader";

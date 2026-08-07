@@ -4,13 +4,21 @@ import { observer, Provider } from "mobx-react";
 import { LobbyState, LobbyModel } from "../models/LobbyModel";
 import { LobbyComponent } from "../Components/LobbyComponent";
 import { getGameComponent } from "../../GameChooser";
+import { SafeBrowser } from "libs/Browser/SafeBrowser";
 import Logger from "js-logger";
-import { GameDescriptor } from "games/lists/GameDescriptor";
+import { LobbyGame } from "games/lists/GameDescriptor";
 
 export interface LobbyMainPageProps {
-  games: GameDescriptor[];
+  games: LobbyGame[];
   lobbyModel: LobbyModel;
   size?: () => { width: number; height: number };
+  /**
+   * Whether this page owns the browser's history and Back button.  True for the app, which
+   * is one lobby filling the window.  FALSE wherever several lobbies share a page - there is
+   * only one history between them, so each one pushing and popping it makes every quit look
+   * to the others like somebody pressed Back.
+   */
+  manageHistory?: boolean;
 }
 
 // -------------------------------------------------------------------
@@ -48,10 +56,15 @@ export class LobbyMainPage extends React.Component<
   // -------------------------------------------------------------------
   componentDidMount() {
     window.addEventListener("resize", this.sizeChangeHandler);
+    if (this.ownsHistory) {
+      this.stopListeningForBack = SafeBrowser.onPopState(this.onPopState);
+    }
   }
   componentWillUnmount() {
     window.removeEventListener("resize", this.sizeChangeHandler);
+    this.stopListeningForBack?.();
   }
+  private stopListeningForBack?: () => void;
   private sizeChangeHandler = () => {
     if (this.getSize) {
       const size = this.getSize();
@@ -63,9 +76,52 @@ export class LobbyMainPage extends React.Component<
   };
 
   // -------------------------------------------------------------------
+  // The Back button.
+  //
+  // Opening a game pushes a history entry, so Back steps out of the game and lands in
+  // the lobby instead of leaving the site altogether - which is what a phone's back
+  // gesture would otherwise do, mid-round.  A hash rather than a real path, because the
+  // relay serves this as a static bundle: a deep path would 404 on refresh, a hash
+  // cannot.
+  //
+  // The history is the PAGE's, not this component's, so a page showing several lobbies at
+  // once (the Test Lobby: a presenter and four phones side by side) must not let each of
+  // them drive it.  One quitting would call history.back(), and every other lobby on the
+  // page would hear that popstate and leave the game too - one X closing all five.
+  // -------------------------------------------------------------------
+  private inGameRoute = false;
+
+  private get ownsHistory() {
+    return this.props.manageHistory !== false;
+  }
+
+  private onPopState = () => {
+    // Back out of a game.  If we are not in one there is nothing to leave.
+    if (!this.inGameRoute) return;
+    this.inGameRoute = false;
+    this.props.lobbyModel.leaveGame();
+  };
+
+  private syncRoute() {
+    if (!this.ownsHistory) return;
+    const inGame = this.props.lobbyModel.lobbyState === LobbyState.ReadyToPlay;
+    if (inGame === this.inGameRoute) return;
+    this.inGameRoute = inGame;
+    const name = this.props.lobbyModel.gameProperties?.gameName ?? "game";
+    if (inGame) {
+      SafeBrowser.pushRoute(`#${name.toLowerCase()}`);
+    } else {
+      // Left by some other route - Quit, or the host ending it.  Drop the entry we
+      // pushed so Back does not walk into a game that is over.
+      SafeBrowser.dropRoute();
+    }
+  }
+
+  // -------------------------------------------------------------------
   // render
   // -------------------------------------------------------------------
   render() {
+    this.syncRoute();
     const { lobbyModel, games } = this.props;
     let innerChild: any;
     const uiProperties = {
