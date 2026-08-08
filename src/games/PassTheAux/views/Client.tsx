@@ -12,12 +12,17 @@ import {
   GeneralGameState,
   GeneralClientGameState,
   SafeBrowser,
-  ScaleToWidth,
+  UINormalizer,
   ErrorBoundary,
-  PlayerAvatar,
+  ClientHeader,
 } from "libs";
 import { PassTheAuxClientModel, PassTheAuxClientState } from "../models/ClientModel";
-import { MAX_BALLOT, CLIENT_PREVIEW_MS, SONG_PLAY_MS } from "../models/GameSettings";
+import {
+  MAX_BALLOT,
+  CLIENT_PREVIEW_MS,
+  SONG_PLAY_MS,
+  PASS_THE_AUX_VERSION_HISTORY,
+} from "../models/GameSettings";
 import { Track, isRealVideoId } from "../models/musicProvider";
 import { YouTubePlayer } from "./YouTubePlayer";
 
@@ -417,31 +422,24 @@ export default class Client extends React.Component<{
   render() {
     const m = this.props.appModel;
     return (
-      <ScaleToWidth
-        virtualWidth={1080}
-        virtualHeight={1920}
-        containerWidth={this.props.uiProperties.containerWidth}
-        containerHeight={this.props.uiProperties.containerHeight}
-        hoverScrollbar
-        fillHeight
-      >
+      <UINormalizer uiProperties={this.props.uiProperties} virtualHeight={1920} virtualWidth={1080}>
         <div className={styles.gameclient}>
           <div className={styles.noise} />
           <div className={styles.sparkles} />
-          <div className={styles.topbar}>
-            <span className={styles.gametitle}>PASS THE AUX</span>
-            <span className={styles.me}>
-              <PlayerAvatar avatarId={m?.avatarId ?? 0} size={44} /> {m?.playerName}
-            </span>
-            <button className={styles.quitbutton} onClick={() => m?.quitApp()}>
-              ✕
-            </button>
-          </div>
+          <ClientHeader
+            className={styles.header}
+            title="PASS THE AUX"
+            history={PASS_THE_AUX_VERSION_HISTORY}
+            avatarId={m?.avatarId ?? 0}
+            avatarColor={m?.avatarColor}
+            playerName={m?.playerName}
+            onQuit={() => m?.quitApp()}
+          />
           <div className={styles.body}>
             <ErrorBoundary>{this.renderSubScreen()}</ErrorBoundary>
           </div>
         </div>
-      </ScaleToWidth>
+      </UINormalizer>
     );
   }
 }

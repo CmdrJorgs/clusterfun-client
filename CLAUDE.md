@@ -25,6 +25,35 @@ state and react to its "invalidate" nudges.
 Both roles extend `BaseGameModel`, which provides the game clock/ticker, scheduled events,
 checkpoint save/restore, animation registration, and message-listener bookkeeping.
 
+## The fixed virtual canvas (read before you touch any view)
+
+**Every screen is authored on a fixed canvas and scaled to fit: presenters 1920×1080, clients
+1080×1920, both through `UINormalizer`.** It scales to fit BOTH dimensions and letterboxes the
+remainder, which is what makes one layout correct on a phone, a tablet, a laptop and a
+television with no media queries. Author in canvas pixels — a fixed 120px header really is
+120px of a 1920-tall phone screen everywhere.
+
+```tsx
+<UINormalizer uiProperties={this.props.uiProperties} virtualWidth={1080} virtualHeight={1920}>
+  <div className={styles.gameclient}>…</div>
+</UINormalizer>
+```
+
+- `.gameclient` is `width: 100%; height: 100%` — it fills the canvas, it does not size itself
+  from the device.
+- The letterbox bars are intentional. Colour them with the game's own background by passing
+  `className` / `backdropClassName` (both land on the full-viewport outer div, as Lexible's
+  presenter does); `src/index.css` provides a dark backstop underneath.
+- `onScaleCalc` reports the scale for games that map raw pointer coordinates into the canvas
+  (Lexible's client).
+- **`ScaleToWidth` is not a substitute** — it fits width only and scrolls. Only the lobby
+  presenter uses it, because its game gallery grows past 1080px as games are added.
+
+`libs/components/virtualCanvas.spec.ts` enforces all of this by reading the source, because
+swapping the canvas for a fit-width component breaks no behavioural test and no build — it
+just silently stops being the same UI on every device. The full story is in the
+[root CLAUDE.md](../CLAUDE.md#the-fixed-virtual-canvas--a-platform-requirement-not-a-styling-choice).
+
 ## Source layout
 
 ```
@@ -230,8 +259,10 @@ types like `ClusterFunPlayer`.
 
 Two of them, on purpose.
 
-**The platform version** is `package.json` (0.5.0), surfaced as `GLOBALS.Version` and shown in
-the lobby. It says which build of ClusterFun is running.
+**The platform version** is `package.json` (0.6.0), surfaced as `GLOBALS.Version` and shown in
+the lobby **beside the wordmark** (it used to sit in the footer next to "I have a room code",
+which is not where anyone looks for "which build is this"). It says which build of ClusterFun
+is running.
 
 **Each game has its own version, on top of that** — all at 0.1.0. A player says "Lexible did
 X"; "which version?" now has an answer per game rather than one number for the whole app.
@@ -250,6 +281,14 @@ That is the whole point: the version and the changelog cannot drift, and there i
 bump a number without saying what changed. `libs/config/GameVersion.spec.ts` checks every
 game's history at once — well-formed numbers, newest first, no duplicates, and **no entry with
 an empty change list**.
+
+**The lobby shows every game's version on its card**, next to the title. It reads them from
+`games/lists/gameVersions.ts`, which maps a registry `name` to that game's own version
+constant. This does not break code-splitting — every `GameSettings.ts` imports from `libs` and
+nothing else, so the map costs the version strings and no game bundle — and it is not a second
+copy of the numbers, because each entry points at the constant the game derives from its own
+change history. `gameVersions.spec.ts` fails if the map and the registry drift in either
+direction.
 
 `<GameVersionTag>` (in `libs/components`) renders the name with the version small and faded to
 its right, and every game uses it on both surfaces:
@@ -539,7 +578,7 @@ to keep the presenter/client/serialization machinery from silently breaking as g
   `FATAL ERROR: Zone Allocation failed - process out of memory`. The damage is not a clean
   failure: dying workers report as **module-resolution errors** in whichever specs they were
   holding — `Cannot find module 'dedent' from jest-circus`, `Cannot find module 'libs' from
-  <some>.spec.ts` — which read as a broken install rather than an OOM, and the same suite
+<some>.spec.ts` — which read as a broken install rather than an OOM, and the same suite
   passes on the next run. It failed two production deploys that way before the cap went in.
 - Test files live next to their source as `*.spec.ts` / `*.spec.tsx` (Jest also picks up
   `*.test.*` and `__tests__/`). `src/setupTests.ts` registers `@testing-library/jest-dom`.

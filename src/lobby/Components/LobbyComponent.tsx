@@ -13,11 +13,12 @@ import {
   SafeBrowser,
   UIProperties,
   UINormalizer,
-  ScaleToWidth
+  ScaleToWidth,
 } from "libs";
 
 import Logger from "js-logger";
 import { LobbyGame } from "games/lists/GameDescriptor";
+import { versionForGame } from "games/lists/gameVersions";
 import { PartyBurstLogo } from "./PartyBurstLogo";
 import { GameThumbnail } from "./GameThumbnail";
 import { CATEGORIES, TILE_PALETTE, presentationFor, GamePresentation } from "../LobbyPresentation";
@@ -29,6 +30,20 @@ interface DecoratedGame {
   game: LobbyGame;
   pres: GamePresentation;
 }
+
+// -------------------------------------------------------------------
+// The game's OWN version, beside its title on a card.
+//
+// Each game versions itself on top of the platform, so "which version?" has a per-game answer
+// - and the lobby is where a player is looking at all of them at once. Renders nothing at all
+// for a game with no registered version rather than an empty "v", which is what a game added
+// to the registry and not to gameVersions.ts looks like.
+// -------------------------------------------------------------------
+const GameVersionSuffix: React.FC<{ gameName: string }> = ({ gameName }) => {
+  const version = versionForGame(gameName);
+  if (!version) return null;
+  return <span className={styles.cardVersion}>v{version}</span>;
+};
 
 // -------------------------------------------------------------------
 // PresenterComponent — the shared "big screen" (wide viewport):
@@ -145,7 +160,13 @@ class PresenterComponent extends React.Component<
 
         {/* Top bar */}
         <div className={styles.presenterTopBar}>
-          <PartyBurstLogo size={40} fontSize={60} />
+          {/* The platform version reads as part of the lockup here. It used to sit in the
+              footer next to "I have a room code", which is the one place on this screen
+              nobody looks for "which build am I running". */}
+          <div className={styles.logoWithVersion}>
+            <PartyBurstLogo size={40} fontSize={60} />
+            <span className={styles.logoVersion}>v{GLOBALS.Version}</span>
+          </div>
           <div className={styles.topBarRight}>
             <span className={styles.liveBadge}>
               <span className={styles.liveDot} /> live
@@ -166,6 +187,7 @@ class PresenterComponent extends React.Component<
               <span className={styles.spotlightKicker}>★ Featured tonight</span>
               <span className={styles.spotlightName}>
                 {featured.game.displayName ?? featured.game.name}
+                <GameVersionSuffix gameName={featured.game.name} />
               </span>
               <span className={styles.spotlightBlurb}>{featured.pres.blurb}</span>
               <div className={styles.spotlightActions}>
@@ -211,7 +233,10 @@ class PresenterComponent extends React.Component<
               >
                 <GameThumbnail kind={pres.thumbKind} accent={pres.accent} size={68} />
                 <div className={styles.cardBody}>
-                  <span className={styles.cardName}>{game.displayName ?? game.name}</span>
+                  <span className={styles.cardName}>
+                    {game.displayName ?? game.name}
+                    <GameVersionSuffix gameName={game.name} />
+                  </span>
                   <span className={styles.cardCategory} style={{ color: pres.accent }}>
                     {pres.category}
                   </span>
@@ -253,7 +278,6 @@ class PresenterComponent extends React.Component<
           >
             I have a room code
           </button>
-          <span className={styles.version}>v{GLOBALS.Version}</span>
         </div>
       </div>
     );
@@ -643,23 +667,17 @@ export class LobbyComponent extends React.Component<LobbyComponentProps> {
         <PresenterComponent games={games} />
       </ScaleToWidth>
     ) : (
-      // Client: scale-to-fill-width (horizontal proportions preserved), height
-      // flows and scrolls if taller than the screen. Bokeh glows live on the
-      // backdrop stage BEHIND the (transparent) scroll so they fill the space
-      // below the content instead of being clipped inside the content box.
-      <div className={styles.clientStage}>
-        <div className={styles.glowCyan} />
-        <div className={styles.glowMagenta} />
-        <ScaleToWidth
-          virtualWidth={1080}
-          containerWidth={uiProperties.containerWidth}
-          containerHeight={uiProperties.containerHeight}
-          className={styles.clientScroll}
-          hoverScrollbar
-        >
-          <GameClientComponent />
-        </ScaleToWidth>
-      </div>
+      // Client: the 1080x1920 phone canvas, fit-both through UINormalizer like every other
+      // client in the app. `backdropClassName` paints the letterbox margin with the lobby's
+      // own dark stage so the bars read as part of the screen.
+      <UINormalizer
+        uiProperties={uiProperties}
+        virtualWidth={1080}
+        virtualHeight={1920}
+        backdropClassName={styles.clientStage}
+      >
+        <GameClientComponent />
+      </UINormalizer>
     );
   }
 }

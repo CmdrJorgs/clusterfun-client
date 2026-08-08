@@ -7,12 +7,17 @@ import {
   UIProperties,
   GeneralGameState,
   GeneralClientGameState,
-  ScaleToWidth,
+  UINormalizer,
   ErrorBoundary,
   ClientHeader,
 } from "libs";
 import { PartyPixClientModel, PartyPixClientState } from "../models/ClientModel";
-import { fileToUploadPair } from "./imageUtil";
+import { fileToUploadPair, dataUrlToUploadPair, UploadImageOptions } from "./imageUtil";
+import { CameraCapture } from "./CameraCapture";
+import { shouldUseInAppCamera } from "./cameraSupport";
+import { savePhotoToDevice, deviceFileName } from "./deviceSave";
+import { PhotoEditor } from "./PhotoEditor";
+import { GLOBALS } from "../../../Globals";
 import {
   MAX_IMAGE_EDGE,
   THUMB_IMAGE_EDGE,
@@ -35,7 +40,22 @@ interface ClientState {
   review: { full: string; thumb: string } | null;
   busy: boolean;
   toast: { text: string; error: boolean } | null;
+  /** The in-app camera is open (PC only - a phone hands over to its camera app). */
+  camera: boolean;
 }
+
+/** One place for the downscale budget, shared by both ways a picture gets in. */
+const UPLOAD_OPTIONS: UploadImageOptions = {
+  fullEdge: MAX_IMAGE_EDGE,
+  thumbEdge: THUMB_IMAGE_EDGE,
+  targetBytes: TARGET_IMAGE_BYTES,
+  startQuality: JPEG_QUALITY_START,
+  minQuality: JPEG_QUALITY_MIN,
+  qualityStep: JPEG_QUALITY_STEP,
+  thumbQuality: THUMB_JPEG_QUALITY,
+};
+
+const hasGetUserMedia = () => typeof navigator?.mediaDevices?.getUserMedia === "function";
 
 // -------------------------------------------------------------------
 // Client Page
@@ -52,7 +72,7 @@ export default class Client extends React.Component<
 
   constructor(props: { appModel?: PartyPixClientModel; uiProperties: UIProperties }) {
     super(props);
-    this.state = { review: null, busy: false, toast: null };
+    this.state = { review: null, busy: false, toast: null, camera: false };
   }
 
   componentWillUnmount() {
@@ -65,24 +85,45 @@ export default class Client extends React.Component<
     this._toastTimer = setTimeout(() => this.setState({ toast: null }), 2600);
   }
 
-  private openCamera = () => this._cameraInput.current?.click();
+  // "Take a Photo" is two different things, because the platforms are.
+  //
+  // A phone gets the file input carrying capture="environment", which hands over to the real
+  // camera app. A PC gets an in-app preview: `capture` is IGNORED on desktop, so this button
+  // used to open a file browser and do exactly the same job as "Upload a photo" beside it.
+  private openCamera = () => {
+    if (shouldUseInAppCamera(GLOBALS.IsMobile, hasGetUserMedia())) {
+      this.setState({ camera: true });
+      return;
+    }
+    this._cameraInput.current?.click();
+  };
   private openAlbum = () => this._albumInput.current?.click();
+
+  private closeCamera = () => this.setState({ camera: false });
+
+  /** The camera could not open at all - drop the player on the file picker rather than a wall. */
+  private cameraFallback = () => {
+    this.setState({ camera: false });
+    this._albumInput.current?.click();
+  };
+
+  private onCameraShot = async (dataUrl: string) => {
+    this.setState({ camera: false, busy: true });
+    await this.toReview(() => dataUrlToUploadPair(dataUrl, UPLOAD_OPTIONS));
+  };
 
   private onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = ""; // allow re-picking the same file
     if (!file) return;
     this.setState({ busy: true });
+    await this.toReview(() => fileToUploadPair(file, UPLOAD_OPTIONS));
+  };
+
+  /** Both ways in end the same: downscale, then show the review. */
+  private toReview = async (make: () => Promise<{ full: string; thumb: string }>) => {
     try {
-      const pair = await fileToUploadPair(file, {
-        fullEdge: MAX_IMAGE_EDGE,
-        thumbEdge: THUMB_IMAGE_EDGE,
-        targetBytes: TARGET_IMAGE_BYTES,
-        startQuality: JPEG_QUALITY_START,
-        minQuality: JPEG_QUALITY_MIN,
-        qualityStep: JPEG_QUALITY_STEP,
-        thumbQuality: THUMB_JPEG_QUALITY,
-      });
+      const pair = await make();
       this.setState({ review: pair, busy: false });
     } catch (err) {
       this.setState({ busy: false });
@@ -90,16 +131,44 @@ export default class Client extends React.Component<
     }
   };
 
-  private doUpload = async () => {
+  /**
+   * The editor hands back a composited JPEG - cropped, with the drawing baked in. It goes
+   * through the same downscale as any other photo so the thumb matches what was actually made,
+   * and the copy kept on the device is the edited picture rather than the raw one.
+   */
+  private uploadEdited = async (edited: string) => {
     const { appModel } = this.props;
-    const { review } = this.state;
-    if (!appModel || !review) return;
+    if (!appModel) return;
+
+    // Keep the copy FIRST, before anything is awaited. The OS share sheet - the only route
+    // that reaches the photo gallery - requires a user gesture, and awaiting anything first
+    // would spend it. The upload does not depend on the result either way.
+    const keeping = appModel.saveToDevice
+      ? savePhotoToDevice(edited, deviceFileName(new Date()))
+      : null;
+
     this.setState({ busy: true });
-    const res = await appModel.uploadPhoto(review.full, review.thumb);
+    let pair: { full: string; thumb: string };
+    try {
+      pair = await dataUrlToUploadPair(edited, UPLOAD_OPTIONS);
+    } catch {
+      this.setState({ busy: false });
+      this.showToast("Couldn't prepare that photo.", true);
+      return;
+    }
+    const res = await appModel.uploadPhoto(pair.full, pair.thumb);
     this.setState({ busy: false });
     if (res.success) {
       this.setState({ review: null });
-      this.showToast("Sent to the big screen!");
+      const kept = keeping ? await keeping : null;
+      this.showToast(
+        kept === "shared" || kept === "downloaded"
+          ? "Sent to the big screen — and kept a copy."
+          : "Sent to the big screen!",
+      );
+      // "cancelled" is the player dismissing the share sheet, which needs no comment. Only a
+      // real failure is worth a word, and never at the cost of the upload's own good news.
+      if (kept === "failed") this.showToast("Couldn't save a copy to this device.", true);
     } else {
       this.showToast(res.error ?? "Upload failed.", true);
     }
@@ -148,7 +217,22 @@ export default class Client extends React.Component<
                 {busy ? "Processing…" : "UPLOAD A PHOTO"}
               </button>
             </div>
-            <div className={styles.costNote}>Costs 1 credit to upload.</div>
+            {/* Shares the row with the cost note so the 400px band still holds three
+                children - see the band layout in Client.module.css. */}
+            <div className={styles.noteRow}>
+              <span className={styles.costNote}>Costs 1 credit to upload.</span>
+              <label className={styles.saveToggle}>
+                <input
+                  type="checkbox"
+                  checked={appModel.saveToDevice}
+                  onChange={(e) => appModel.setSaveToDevice(e.target.checked)}
+                />
+                {/* Deliberately not "save to my gallery": a web page cannot write there. On a
+                    phone this opens the share sheet, where Save Image does reach Photos; on a
+                    PC it is a download. See deviceSave.ts. */}
+                Keep a copy on this device
+              </label>
+            </div>
           </>
         ) : (
           <div className={styles.outOfCredits}>
@@ -289,6 +373,13 @@ export default class Client extends React.Component<
           <div className={styles.photoZone}>{this.renderPhotoZone()}</div>
           <div className={styles.bottomZone}>{this.renderBottomZone()}</div>
           {this.renderReview()}
+          {this.state.camera ? (
+            <CameraCapture
+              onCapture={this.onCameraShot}
+              onCancel={this.closeCamera}
+              onUseFilePicker={this.cameraFallback}
+            />
+          ) : null}
         </div>
         {this.renderNotice()}
       </>
@@ -306,18 +397,16 @@ export default class Client extends React.Component<
     if (!appModel || !review) return null;
     const canAfford = appModel.credits >= UPLOAD_COST;
 
+    // The review IS the editor: crop and draw, then send. Making it a separate step behind an
+    // "Edit" button would mean most photos never got looked at twice.
     return (
-      <div className={styles.reviewOverlay}>
-        <img className={styles.reviewImg} src={review.full} alt="your shot" />
-        <div className={styles.reviewActions}>
-          <button className={styles.retake} onClick={this.retake} disabled={busy}>
-            Retake
-          </button>
-          <button className={styles.upload} onClick={this.doUpload} disabled={busy || !canAfford}>
-            {busy ? "Sending…" : "Upload −1 credit"}
-          </button>
-        </div>
-      </div>
+      <PhotoEditor
+        source={review.full}
+        busy={busy || !canAfford}
+        doneLabel={busy ? "Sending…" : canAfford ? "Upload −1 credit" : "Out of credits"}
+        onCancel={this.retake}
+        onDone={this.uploadEdited}
+      />
     );
   }
 
@@ -411,14 +500,7 @@ export default class Client extends React.Component<
     const { appModel } = this.props;
     const { toast } = this.state;
     return (
-      <ScaleToWidth
-        virtualWidth={1080}
-        virtualHeight={1920}
-        containerWidth={this.props.uiProperties.containerWidth}
-        containerHeight={this.props.uiProperties.containerHeight}
-        hoverScrollbar
-        fillHeight
-      >
+      <UINormalizer uiProperties={this.props.uiProperties} virtualHeight={1920} virtualWidth={1080}>
         <div className={styles.gameclient}>
           <ClientHeader
             className={styles.header}
@@ -436,7 +518,7 @@ export default class Client extends React.Component<
             </div>
           ) : null}
         </div>
-      </ScaleToWidth>
+      </UINormalizer>
     );
   }
 }

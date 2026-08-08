@@ -6,6 +6,9 @@ import { PARTY_PIX_VERSION_HISTORY } from "../../games/PartyPix/models/GameSetti
 import { RETROSPECTRO_VERSION_HISTORY } from "../../games/RetroSpectro/models/GameSettings";
 import { TEMPLATE_VERSION_HISTORY } from "../../games/TemplateGame/models/GameSettings";
 import { STRESSATO_VERSION_HISTORY } from "../../games/stressgame/models/GameSettings";
+import { PASS_THE_AUX_VERSION_HISTORY } from "../../games/PassTheAux/models/GameSettings";
+import { FACE_OFF_VERSION_HISTORY } from "../../games/FaceOff/models/GameSettings";
+import { COLLAGE_BOARD_VERSION_HISTORY } from "../../games/CollageBoard/models/GameSettings";
 
 // ==========================================================================================
 // A game's version IS the newest entry of its change history, so the two cannot drift and a
@@ -19,6 +22,9 @@ const HISTORIES = {
   "101": ONE_OH_ONE_VERSION_HISTORY,
   PartyPix: PARTY_PIX_VERSION_HISTORY,
   RetroSpectro: RETROSPECTRO_VERSION_HISTORY,
+  PassTheAux: PASS_THE_AUX_VERSION_HISTORY,
+  FaceOff: FACE_OFF_VERSION_HISTORY,
+  CollageBoard: COLLAGE_BOARD_VERSION_HISTORY,
   Template: TEMPLATE_VERSION_HISTORY,
   Stressato: STRESSATO_VERSION_HISTORY,
 };
@@ -95,9 +101,14 @@ describe("every game's version history", () => {
     });
   }
 
-  it("starts every game at 0.1.0 on top of the platform's own version", () => {
+  it("gives every game a real released version, on top of the platform's own", () => {
+    // This used to assert every game was EXACTLY 0.1.0, which was true on the day the scheme
+    // landed and became a tripwire the moment a game shipped a change - PartyPix bumping to
+    // 0.2.0 failed it. The rule that actually matters is that a game has been released at
+    // all: 0.0.x means a version nobody has stood behind.
     for (const [game, history] of Object.entries(HISTORIES)) {
-      expect([game, currentVersion(history)]).toEqual([game, "0.1.0"]);
+      const version = currentVersion(history);
+      expect([game, compareVersions(version, "0.1.0") >= 0]).toEqual([game, true]);
     }
   });
 });

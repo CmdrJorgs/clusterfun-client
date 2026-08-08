@@ -59,18 +59,19 @@ checkpoint:
     game falls back to in-memory elsewhere. Also generates phone thumbnails from loaded images
     (canvas, via `imageUtil.scaleImageToJpeg`).
 - Flow: `reconstitute()` calls `initPhotoStore()` → `PhotoStore.restore()` reads the remembered
-  handle and `queryPermission()` (no prompt). `granted` (same-session refresh) → load silently;
-  `prompt`/`denied` (new session after a browser restart) → `folderStatus = "needsReconnect"`, the
-  join screen shows a one-click **Reconnect** button (`requestPermission` needs a gesture); no handle
-  → the join screen shows **Choose a folder** + an "include existing photos?" checkbox
-  (`showDirectoryPicker`, also gesture). So a mid-session refresh never re-asks; a new session is one
-  click and never re-picks the folder.
+  handle and `queryPermission()` (no prompt). `granted` (same-session refresh) → the folder is
+  connected and `evaluateResumeOffer()` runs — **it does not load photos**, see "The presenter
+  ALWAYS starts on the setup screen" below; `prompt`/`denied` (new session after a browser restart)
+  → `folderStatus = "needsReconnect"`, the join screen shows a one-click **Reconnect** button
+  (`requestPermission` needs a gesture); no handle → the join screen shows **Choose a folder** + an
+  "include existing photos?" checkbox (`showDirectoryPicker`, also gesture). So a mid-session
+  refresh never re-asks; a new session is one click and never re-picks the folder.
 - **Folder preview:** after `chooseFolder` picks a folder it does NOT start the show — it sets
   `folderPreviewOpen` and loads `folderPreview` (thumbnails of up to 24 image files on disk, via
   `PhotoStore.listImageThumbs`, with the total count). The join card shows those thumbnails, a
   re-toggleable "include these" checkbox (`setIncludeExisting` re-persists), and a **Start slideshow**
-  button (`startFromFolder` → `loadPhotosFromDisk`). `reconnectFolder`/`restore` skip the preview and
-  resume directly. `folderPreview*` are excluded from serialization.
+  button (`startFromFolder` → `loadPhotosFromDisk`). `reconnectFolder`/`restore` skip the preview
+  and land on the resume offer instead. `folderPreview*` are excluded from serialization.
 - On upload, `handleUpload` writes the full JPEG to the folder off the response path and records the
   file name on the `PartyPixPhoto`. On load, `loadPhotosFromDisk` rebuilds `photos` from the folder
   (uploaded files keep their author from the index; pre-existing images appear only if "include
@@ -176,6 +177,93 @@ HAPPEN rather than three numbers that change: **your photo was flagged**, **your
 and **the whole room upvoted one of yours** (`up === players.length - 1`, since an author cannot
 vote on their own). Every one of them explains the credit economy, because "why can I not take
 another photo" is the question the game otherwise never answers out loud.
+
+## The presenter ALWAYS starts on the setup screen
+
+It used to reconnect a remembered folder during `initPhotoStore()` and call
+`loadPhotosFromDisk()`, which set `gameState = Slideshow` the moment it found any photos. In
+production that meant a fresh presenter skipped setup entirely and dropped into the _previous_
+party's slideshow — no room code, no join instructions, no way to start clean.
+
+`reconstitute()` now pins `gameState = Gathering` unconditionally, and startup never loads
+photos. `loadPhotosFromDisk()` is reached only from a host gesture: `startFromFolder`
+(after the folder preview) or `continueLastParty`.
+
+**Continuing an interrupted party** is a question the setup screen asks, not something startup
+decides. `evaluateResumeOffer()` counts the folder's images (`listImageThumbs(0)` — enumerates
+names, decodes no thumbnails) and applies `shouldOfferResume` from `partyPixLogic`:
+
+- photos in the folder, **and**
+- `lastPartyAt` inside `PARTY_RESUME_WINDOW_MS` (24 h).
+
+`lastPartyAt` is stamped on every upload and is **the one folder-related field that IS
+serialized** — it has to outlive the presenter being killed, which is the whole case this
+exists for. Photos in the folder are deliberately _not_ sufficient on their own: the ordinary
+case is a new party in a folder that already holds last week's pictures. Anything older than
+the window is left alone and the host starts clean. **Neither branch touches the files.**
+
+Covered by `models/partyResume.spec.ts`, including the window edge, an empty folder, a
+never-used folder (`lastPartyAt === 0`), and a clock that has gone backwards.
+
+## The host screen's geometry is EXACT
+
+1920x1080, split by three CSS variables on `.gamepresenter` so nothing can drift:
+
+| Variable              | Value | What it is                                                 |
+| --------------------- | ----- | ---------------------------------------------------------- |
+| `--pp-frame-h`        | 78px  | The frame: Quit, wordmark, version, and the join line.     |
+| `--pp-reserve-top`    | 250px | Frame + `.showTopReserve` (which holds the host controls). |
+| `--pp-reserve-bottom` | 100px | `.photoBar` - author, tallies, counter.                    |
+
+The picture gets what is left — **730px** — and `.stagePhoto` is `width/height: 100%` with
+`object-fit: contain`, so a small photo is scaled UP to the stage as well as a large one being
+scaled down. Maximums alone would leave a 600px picture sitting at 600px in a 730px band.
+
+`.showTopReserve` is `calc(var(--pp-reserve-top) - var(--pp-frame-h))`, which is what keeps
+"250 from the top of the SCREEN" true rather than 250 from the top of the content box. Measured
+live: top 250, bottom 100, stage 730.
+
+The frame carries the wordmark and the version at the Quit button's own 18px, and the join
+details replaced "Room XXXX" — that line is the one thing somebody across the room needs, and
+it used to be duplicated on the slideshow underneath. There is no Pause button.
+
+## Crop and draw, before the photo is sent
+
+`views/PhotoEditor.tsx` IS the review step — crop and draw are not behind a further "Edit"
+button, because most photos would never get looked at twice.
+
+**Everything is stored in normalized ORIGINAL-image space (0..1), never screen pixels.** The
+crop is a 0..1 rect; every stroke point is a 0..1 position on the source photo. The phone
+preview and the full-resolution composite are then two renderings of the same numbers, which
+is what stops a stroke landing somewhere else in the picture that actually gets uploaded, and
+what lets the crop be adjusted afterwards without dragging the paint around with it. Strokes
+outside the crop are clipped by the canvas rather than dropped, so widening the crop brings
+them back. The geometry is pure and specced in `views/photoEditLogic.spec.ts`.
+
+One medium brush, eight colours, and the width is a FRACTION of the image
+(`BRUSH_FRACTION`) — a flat pixel width is a bold stroke on a 350px preview and a hairline on
+the 1600px composite.
+
+**The drawing is baked into the JPEG on the phone**, so the host and the wire format know
+nothing about any of it: `finish()` composites crop + strokes at full resolution, and
+`uploadEdited` runs the result back through `dataUrlToUploadPair` so the thumb matches what
+was actually made. The copy kept on the device is the edited picture too.
+
+## Keeping a copy on the phone
+
+`saveToDevice` on the client model (serialized, off by default) copies each photo to the
+device as it is uploaded. **A web page cannot write to the photo gallery** — there is no API
+for it. `views/deviceSave.ts` does the only two things that exist:
+
+1. `navigator.share({ files })` when `navigator.canShare` accepts an image — the OS share
+   sheet, whose "Save Image" does reach Photos. Needs a user gesture.
+2. Otherwise an object-URL download: Downloads on Android, Files on iOS, never Photos.
+
+So the toggle says **"Keep a copy on this device"**, not "save to your gallery", which would be
+a lie on desktop and on every browser without the share target. `doUpload` fires the save
+**before** awaiting the upload — an await first would spend the gesture and the share sheet
+would refuse. A dismissed sheet (`AbortError`) is `"cancelled"`, not a failure, and is silent;
+falling through to a download there would be doing it anyway behind the player's back.
 
 ## The photo folder is not optional any more
 
