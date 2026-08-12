@@ -19,7 +19,15 @@ import {
   PlayerAvatar,
 } from "libs";
 import { ingredientName, progressAcrossStation } from "../models/sushiSyncLogic";
+import { ART_INGREDIENT_IDS } from "../models/plateArt";
+import { IngredientSwatch, SushiPlate, preloadPlateArt } from "./SushiPlate";
 import Logger from "js-logger";
+
+// Rendered widths, in the phone's 1080-wide virtual canvas.  The hero plate is sized so the
+// 512px source art lands at roughly 1:1 on a typical high-DPI phone rather than being
+// upscaled - see ASSETS.md for the pixel budget behind these numbers.
+const HERO_PLATE_ART_SIZE = 460;
+const BELT_PLATE_ART_SIZE = 150;
 
 // ------------------------------------------------------------------------------------------
 // Seating - the physical arrangement step
@@ -71,6 +79,15 @@ class SeatingScreen extends React.Component<{ appModel?: SushiSyncClientModel }>
 @inject("appModel")
 @observer
 class BriefingScreen extends React.Component<{ appModel?: SushiSyncClientModel }> {
+  // Warm the image cache while the chef reads their ingredient list, so no layer pops in
+  // mid-service.  Preloads EVERY ingredient rather than just this chef's own: plates crossing
+  // my segment arrive carrying whatever the chefs upstream put on them, and the phone is not
+  // told which ingredients are active this round.  The full set is 13 small files, so this is
+  // cheaper than widening the onboard payload just to carry a cache hint.
+  componentDidMount() {
+    preloadPlateArt(ART_INGREDIENT_IDS);
+  }
+
   render() {
     const { appModel } = this.props;
     if (!appModel) return <div>NO APP MODEL</div>;
@@ -85,7 +102,12 @@ class BriefingScreen extends React.Component<{ appModel?: SushiSyncClientModel }
         <div className={styles.sectionLabel}>YOU ARE THE ONLY CHEF WITH</div>
         <div className={styles.briefingList}>
           {appModel.myIngredients.length > 0
-            ? appModel.myIngredients.map((i) => i.name).join(" · ")
+            ? appModel.myIngredients.map((i) => (
+                <span className={styles.briefingIngredient} key={i.id}>
+                  <IngredientSwatch id={i.id} size={120} />
+                  {i.name}
+                </span>
+              ))
             : "nothing this round - help call out orders!"}
         </div>
 
@@ -135,10 +157,8 @@ class GameScreen extends React.Component<{ appModel?: SushiSyncClientModel }> {
                 style={{ left: `${fraction * 100}%` }}
                 onClick={() => appModel.pullPlate(plate.id)}
               >
+                <SushiPlate stack={plate.stack} size={BELT_PLATE_ART_SIZE} />
                 <div className={styles.beltPlateTable}>T{plate.table}</div>
-                <div className={styles.beltPlateStack}>
-                  {plate.stack.length > 0 ? plate.stack.map(ingredientName).join(" › ") : "empty"}
-                </div>
               </div>
             );
           })
@@ -160,6 +180,13 @@ class GameScreen extends React.Component<{ appModel?: SushiSyncClientModel }> {
             <div className={styles.plateHint}>
               Check the big screen for what Table {plate.table} ordered.
             </div>
+
+            {/* The hero plate.  Sized so 512px of source art lands at roughly 1:1 on a
+                typical high-DPI phone - see ASSETS.md for the pixel budget. */}
+            <div className={styles.heroPlate}>
+              <SushiPlate stack={plate.stack} size={HERO_PLATE_ART_SIZE} />
+            </div>
+
             <div className={styles.stackRow}>
               {plate.stack.length > 0 ? (
                 plate.stack.map((id, i) => (
@@ -188,6 +215,7 @@ class GameScreen extends React.Component<{ appModel?: SushiSyncClientModel }> {
                 disabled={!plate}
                 onClick={() => appModel.addIngredient(ingredient.id)}
               >
+                <IngredientSwatch id={ingredient.id} size={110} />
                 {ingredient.name}
                 <span className={styles.ingredientCategory}>{ingredient.category}</span>
               </button>

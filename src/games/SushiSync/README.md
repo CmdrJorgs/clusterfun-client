@@ -45,3 +45,14 @@ and the server's `game_manifest`. Run `npm start` and pick **Sushi Sync** in the
 Tuning constants live in `models/GameSettings.ts`. If playtests find the game too punishing,
 `SHOW_MY_TURN_HIGHLIGHT` and `SHOW_NEXT_LAYER_HINT` (both `false` by default) soften the
 information load without touching game logic.
+
+### Plate art
+
+Every ingredient is a separate PNG layered onto the plate in the order the chefs applied it,
+so a plate always shows exactly what is on it — including when it has gone wrong.
+**[assets/ASSETS.md](assets/ASSETS.md)** is the drawing contract: canvas, seat line, layer
+band, per-ingredient rise, and how to add an ingredient. Layout maths is pure and tested in
+`models/plateArt.ts`; the renderer is `views/SushiPlate.tsx`.
+
+The art in `assets/images/ingredients/` is currently **placeholder** — drawn to the exact
+spec geometry so real art can replace it one file at a time.

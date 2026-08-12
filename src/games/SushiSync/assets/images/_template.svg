@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Sushi Sync - ingredient layer drawing template.
+
+  Open this in your editor of choice, draw ONE ingredient into the LAYER BAND, hide the
+  guide layer, and export a 512x384 PNG-32 named after the ingredient id.
+  Full instructions: ../ASSETS.md
+
+  The only rule that really matters: draw the ingredient SEATED ON THE SEAT LINE, as a
+  self-contained slab. It has to look right at any height in the stack, because players are
+  allowed to layer things in the wrong order - that is the game.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="384" viewBox="0 0 512 384">
+  <defs>
+    <style>
+      .guide      { fill: none; stroke: #ff3b8b; stroke-width: 1; }
+      .guideSoft  { fill: none; stroke: #6f7ae8; stroke-width: 1; stroke-dasharray: 6 5; }
+      .guideFaint { fill: none; stroke: #9aa0b4; stroke-width: 1; stroke-dasharray: 3 6; }
+      .band       { fill: #6f7ae8; opacity: 0.07; }
+      .dish       { fill: #9aa0b4; opacity: 0.10; }
+      .lbl        { font-family: "Helvetica Neue", Arial, sans-serif; font-size: 11px;
+                    fill: #ff3b8b; font-weight: 700; letter-spacing: 0.5px; }
+      .lblSoft    { font-family: "Helvetica Neue", Arial, sans-serif; font-size: 10px;
+                    fill: #6f7ae8; letter-spacing: 0.5px; }
+      .lblFaint   { font-family: "Helvetica Neue", Arial, sans-serif; font-size: 9px;
+                    fill: #9aa0b4; letter-spacing: 0.5px; }
+    </style>
+  </defs>
+
+  <!-- ============================================================================
+       GUIDES - delete or hide this whole group before exporting.
+       ============================================================================ -->
+  <g id="guides">
+
+    <!-- Canvas edge -->
+    <rect x="0.5" y="0.5" width="511" height="383" class="guideFaint" />
+
+    <!-- The dish. Ghosted here for context only: the dish is its OWN file (dish.png).
+         Do not draw it into an ingredient file. -->
+    <ellipse cx="256" cy="292" rx="236" ry="26" class="dish" />
+    <path d="M20 292 a236 26 0 0 0 472 0 v10 a236 30 0 0 1 -472 0 z" class="dish" />
+    <ellipse cx="256" cy="292" rx="236" ry="26" class="guideFaint" />
+    <text x="26" y="330" class="lblFaint">DISH FOOTPRINT - separate file (dish.png), shown for context</text>
+
+    <!-- The layer band: the maximum box an ingredient body may occupy. -->
+    <rect x="80" y="192" width="352" height="100" class="band" />
+    <rect x="80.5" y="192.5" width="351" height="99" class="guideSoft" />
+    <text x="84" y="187" class="lblSoft">LAYER BAND  352 x 100  -  keep the ingredient body inside this</text>
+
+    <!-- The seat line: where the bottom of every ingredient rests. -->
+    <line x1="0" y1="292" x2="512" y2="292" class="guide" stroke-width="2" />
+    <text x="6" y="288" class="lbl">SEAT LINE  y = 292</text>
+
+    <!-- Drip zone: sauces / roe may spill slightly below the seat line. -->
+    <rect x="80" y="292" width="352" height="12" class="guideSoft" />
+    <text x="84" y="315" class="lblSoft">DRIP ZONE  12px  -  sauces and scatters may overhang</text>
+
+    <!-- Horizontal centre -->
+    <line x1="256" y1="150" x2="256" y2="320" class="guideFaint" />
+    <text x="260" y="146" class="lblFaint">CENTRE x = 256</text>
+
+    <!-- Rise ruler: how far this ingredient lifts whatever is stacked on top of it.
+         Tune the value in models/plateArt.ts INGREDIENT_RISE to match what you draw. -->
+    <g>
+      <line x1="44" y1="292" x2="44" y2="192" class="guideFaint" />
+      <text x="8" y="196" class="lblFaint">RISE</text>
+
+      <line x1="38" y1="282" x2="50" y2="282" class="guideFaint" />
+      <text x="54" y="285" class="lblFaint">10  sesame</text>
+
+      <line x1="38" y1="276" x2="50" y2="276" class="guideFaint" />
+      <text x="54" y="279" class="lblFaint">16  tobiko / sauces</text>
+
+      <line x1="38" y1="274" x2="50" y2="274" class="guideFaint" />
+      <text x="54" y="270" class="lblFaint">18  nori / soy paper</text>
+
+      <line x1="38" y1="258" x2="50" y2="258" class="guideFaint" />
+      <text x="54" y="261" class="lblFaint">34  salmon / tuna / eel</text>
+
+      <line x1="38" y1="236" x2="50" y2="236" class="guideFaint" />
+      <text x="54" y="239" class="lblFaint">56  rice</text>
+    </g>
+  </g>
+
+  <!-- ============================================================================
+       ARTWORK - draw the ingredient here. Everything outside stays transparent.
+       ============================================================================ -->
+  <g id="artwork">
+  </g>
+</svg>

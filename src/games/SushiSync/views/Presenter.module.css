@@ -135,34 +135,48 @@
   font-size: 90%;
 }
 
+/* A plate riding the belt.  The box is anchored on the plate's SEAT LINE rather than its
+   centre, so a tall stack grows upward out of the frame instead of pushing the dish down off
+   the conveyor.  See plateArt.ts for the authoring geometry. */
 .beltPlateDot {
   position: absolute;
-  transform: translate(-50%, -50%);
-  width: 54px;
-  height: 54px;
-  border-radius: 50%;
+  transform: translate(-50%, -74%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* The table number, tucked under the dish where it cannot be hidden by the food. */
+.beltPlateTag {
+  margin-top: -6px;
+  min-width: 34px;
+  padding: 1px 8px;
+  border-radius: 10px;
   background: #f5efe4;
   color: #21242f;
-  font-size: 26px;
+  font-size: 24px;
   font-weight: 800;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 4px solid #cfc4ae;
+  text-align: center;
+  border: 3px solid #cfc4ae;
   box-sizing: border-box;
 }
 
 /* A plate lifted off the belt onto a chef's bench.  Drawn inside the ring (see
-   BENCH_RADIUS in Presenter.tsx), smaller and outlined rather than filled, so at a glance
-   the ring reads as "still travelling" and the inside as "someone is working on it". */
+   BENCH_RADIUS in Presenter.tsx) and dimmed with a dashed tag, so at a glance the ring
+   reads as "still travelling" and the inside as "someone is working on it". */
 .beltPlateDotHeld {
-  width: 40px;
-  height: 40px;
-  font-size: 19px;
-  opacity: 0.9;
+  opacity: 0.92;
+}
+
+.beltPlateDotHeld .beltPlateTag {
   background: #2a2f3d;
   color: #f5efe4;
   border: 3px dashed #8d93a6;
+}
+
+/* Ingredient art riding alongside a text label (order-board chips, briefing table). */
+.layerChipArt {
+  margin-right: 8px;
 }
 
 /* ---------------------------------------------------------------- Order board */
@@ -323,6 +337,17 @@
   font-size: 52%;
   color: #f0a93b;
   line-height: 1.6;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 20px;
+  align-items: center;
+}
+
+/* One "picture + name" pair. The briefing is where chefs learn which drawing means which
+   ingredient, so the art and the word have to appear together here. */
+.briefingIngredient {
+  display: inline-flex;
+  align-items: center;
 }
 
 /* ---------------------------------------------------------------- Results */

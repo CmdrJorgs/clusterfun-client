@@ -28,6 +28,7 @@ import {
   SushiSyncOrder,
 } from "../models/PresenterModel";
 import { ingredientName } from "../models/sushiSyncLogic";
+import { IngredientSwatch, SushiPlate, preloadPlateArt } from "./SushiPlate";
 
 // The patience bar turns red (and the card highlights) below this fraction remaining.
 const URGENT_PATIENCE = 0.33;
@@ -37,6 +38,11 @@ const URGENT_PATIENCE = 0.33;
 // travelling.  The gap has to be big enough to read at a glance from across the room.
 const BELT_RADIUS = 205;
 const BENCH_RADIUS = 148;
+
+// Rendered width of a plate riding the ring.  At the busiest round the belt carries up to a
+// dozen plates around a circumference of ~1290px, so anything much wider than this starts
+// overlapping its neighbours.
+const BELT_PLATE_ART_SIZE = 96;
 
 // ------------------------------------------------------------------------------------------
 // Shared bits
@@ -174,6 +180,14 @@ class SeatingPage extends React.Component<{ appModel?: SushiSyncPresenterModel }
 @inject("appModel")
 @observer
 class RoundBriefingPage extends React.Component<{ appModel?: SushiSyncPresenterModel }> {
+  // The briefing is a ~9 second beat that already lists who owns what, which makes it the
+  // natural place to warm the image cache.  Without this the first plate carrying each
+  // ingredient pops in mid-service - worst at Rush Hour, exactly when a blank layer costs
+  // the most.
+  componentDidMount() {
+    preloadPlateArt(this.props.appModel?.activeIngredientIds ?? []);
+  }
+
   render() {
     const { appModel } = this.props;
     if (!appModel) return <div>NO APP MODEL</div>;
@@ -198,7 +212,14 @@ class RoundBriefingPage extends React.Component<{ appModel?: SushiSyncPresenterM
                 <span className={styles.seatIndex}>#{player.stationIndex}</span>
               </div>
               <div className={styles.briefingIngredients}>
-                {player.ingredientIds.map(ingredientName).join(" · ") || "nothing this round"}
+                {player.ingredientIds.length > 0
+                  ? player.ingredientIds.map((id) => (
+                      <span className={styles.briefingIngredient} key={id}>
+                        <IngredientSwatch id={id} size={64} className={styles.layerChipArt} />
+                        {ingredientName(id)}
+                      </span>
+                    ))
+                  : "nothing this round"}
               </div>
             </div>
           ))}
@@ -231,6 +252,7 @@ class PlayingPage extends React.Component<{
         <div className={styles.orderRecipe}>
           {order.recipe.map((id, i) => (
             <span className={styles.layerChip} key={`${id}-${i}`}>
+              <IngredientSwatch id={id} size={46} className={styles.layerChipArt} />
               {i + 1}. {ingredientName(id)}
             </span>
           ))}
@@ -303,7 +325,8 @@ class PlayingPage extends React.Component<{
                   : `Table ${plate.tableNumber}`
               }
             >
-              {plate.tableNumber}
+              <SushiPlate stack={plate.stack} size={BELT_PLATE_ART_SIZE} />
+              <span className={styles.beltPlateTag}>{plate.tableNumber}</span>
             </div>
           );
         })}

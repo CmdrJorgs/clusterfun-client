@@ -6,6 +6,7 @@ import {
   FIRST_TABLE_NUMBER,
   LAST_TABLE_NUMBER,
   MAX_PLAYERS,
+  MAX_STACK_HEIGHT,
   MIN_PLAYERS,
   ROUNDS,
   RoundConfig,
@@ -75,10 +76,6 @@ const MAX_TICK_ELAPSED_MS = 250;
 // Grace period after the briefing before the first plate appears, so nobody is behind on the
 // very first order.
 const FIRST_SPAWN_GRACE_MS = 1500;
-
-// A safety valve: a plate can never hold more layers than the longest possible recipe plus a
-// little slack.  Prevents a stuck client spamming a plate into a giant payload.
-const MAX_STACK_HEIGHT = 8;
 
 // -------------------------------------------------------------------
 // The presenter's record for one chef.

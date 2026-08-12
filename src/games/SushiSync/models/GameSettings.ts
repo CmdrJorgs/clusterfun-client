@@ -106,3 +106,8 @@ export const SHOW_NEXT_LAYER_HINT = false;
 // Customer table numbers are drawn from this range so the order board reads like a restaurant.
 export const FIRST_TABLE_NUMBER = 1;
 export const LAST_TABLE_NUMBER = 24;
+
+// A safety valve: a plate can never hold more layers than the longest possible recipe plus a
+// little slack.  Prevents a stuck client spamming a plate into a giant payload.  The plate-art
+// layout also sizes its compression budget against this (see plateArt.ts).
+export const MAX_STACK_HEIGHT = 8;

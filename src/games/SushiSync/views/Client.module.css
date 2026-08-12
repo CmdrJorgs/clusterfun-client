@@ -88,19 +88,21 @@
   background: #2f3446;
 }
 
+/* A plate crossing my segment.  The card is just a tap target now - the sushi art carries the
+   information, so the plate is anchored on the rail and its stack grows upward from there
+   rather than being centred and drifting off the rail as it gets taller. */
 .beltPlate {
   position: absolute;
   top: 50%;
-  transform: translate(-50%, -50%);
-  min-width: 170px;
-  background: #f5efe4;
-  color: #21242f;
-  border-radius: 16px;
-  padding: 12px 16px;
-  text-align: center;
-  border: 4px solid #cfc4ae;
+  transform: translate(-50%, -100%);
+  padding: 8px 10px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   box-sizing: border-box;
   cursor: pointer;
+  border-radius: 16px;
+  border: 4px solid transparent;
 }
 
 .beltPlateMine {
@@ -109,15 +111,15 @@
 }
 
 .beltPlateTable {
-  font-size: 42px;
+  font-size: 34px;
   font-weight: 800;
-}
-
-.beltPlateStack {
-  font-size: 26px;
-  color: #5c5548;
-  line-height: 1.3;
-  margin-top: 4px;
+  color: #21242f;
+  background: #f5efe4;
+  border: 3px solid #cfc4ae;
+  border-radius: 12px;
+  padding: 0 12px;
+  margin-top: -8px;
+  box-sizing: border-box;
 }
 
 .beltEmpty {
@@ -156,6 +158,16 @@
   font-size: 38%;
   color: #8d8794;
   margin-top: 6px;
+}
+
+/* The hero plate.  Extra headroom above the dish so a tall stack has somewhere to grow -
+   layers translate upward out of their own box by design (see plateArt.ts). */
+.heroPlate {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  padding-top: 150px;
+  margin-top: 10px;
 }
 
 .stackRow {
@@ -201,11 +213,19 @@
   gap: 14px;
 }
 
+/* Shows the same art the plate will render, so a chef learns "this picture = this button"
+   without having to read.  At Rush Hour speed that recognition is the difference between
+   adding a layer and fumbling one. */
 .ingredientButton {
   background: #35406b;
   font-size: 52%;
   font-weight: 700;
   flex: 1 1 40%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding-top: 10px;
 }
 
 .ingredientButtonHint {
@@ -282,6 +302,18 @@
   line-height: 1.8;
   margin: 22px 0;
   font-weight: 700;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px 28px;
+}
+
+/* Picture + name together.  The briefing is the one calm moment where a chef can learn which
+   drawing means which ingredient, so both have to appear side by side here. */
+.briefingIngredient {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .subtle {
