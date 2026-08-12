@@ -499,7 +499,7 @@ class RoundScorePage extends React.Component<{ appModel?: MinefieldPresenterMode
           <div className={styles.pitch}>
             Field declassified — check your phone to see what you were walking through.
           </div>
-          {appModel.rankedTeams.map((team) => (
+          {appModel.roundRankedTeams.map((team) => (
             <div
               key={team.teamId}
               className={styles.liveTeam}

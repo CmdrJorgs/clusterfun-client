@@ -8,6 +8,7 @@ import {
   ITelemetryLogger,
   IStorage,
   ITypeHelper,
+  PresenterGameEvent,
   PresenterGameState,
   GeneralGameState,
 } from "libs";
@@ -208,8 +209,19 @@ export class MinefieldPresenterModel extends ClusterfunPresenterModel<MinefieldP
   /** True once a round is over and the field has been declassified for everyone. */
   @observable revealed = false;
 
+  /** Standings across the whole game - what decides the winner. */
   get rankedTeams(): MinefieldTeam[] {
     return this.teams.slice().sort((l, r) => r.score - l.score);
+  }
+
+  /**
+   * How THIS round went, which is a different question from who is winning: made it home
+   * first, then fewest deaths, then fewest steps, then who got there soonest.  The
+   * between-rounds screen wants this one - ordering it by cumulative score would tell a team
+   * that just walked a clean route that they came last.
+   */
+  get roundRankedTeams(): MinefieldTeam[] {
+    return rankTeams(this.teams.map((team) => ({ team, ...team.run }))).map((entry) => entry.team);
   }
 
   get winners(): MinefieldTeam[] {
@@ -245,6 +257,23 @@ export class MinefieldPresenterModel extends ClusterfunPresenterModel<MinefieldP
     super.reconstitute();
     this.listenToEndpoint(MinefieldOnboardEndpoint, this.handleOnboardClient);
     this.listenToEndpoint(MinefieldMoveEndpoint, this.handleMove);
+
+    // Seat every arrival IMMEDIATELY rather than at the next round boundary.
+    //
+    // Team assignment used to happen only in prepareFreshRound, which read correctly and was
+    // wrong twice over: during Gathering the host saw "nobody yet" under every team and so
+    // could not pick an explorer at all, and a player who joined mid-round sat on "STAND BY"
+    // until the round ended instead of being able to watch the trail and help.
+    this.subscribe(PresenterGameEvent.PlayerJoined, "seat arrivals on a team", () =>
+      this.seatArrivals(),
+    );
+  }
+
+  /** Put anybody without a team on the smallest one, and make sure they have intel to give. */
+  seatArrivals() {
+    action(() => assignTeams(this.players, this.teamCount))();
+    this.players.forEach((player) => this.dealIntelIfMissing(player));
+    this.saveCheckpoint();
   }
 
   createFreshPlayerEntry(name: string, id: string): MinefieldPlayer {
@@ -541,14 +570,27 @@ export class MinefieldPresenterModel extends ClusterfunPresenterModel<MinefieldP
     const team = this.teamById(player.teamId);
     if (!map || !team || team.explorerId === player.playerId) return;
     if (team.intel[player.playerId]) return;
-    const share = distributeIntel(
-      intelKeysFor(map),
-      1,
-      this.difficulty.intelOverlap,
-      makeRng(this.randomInt(1 << 30)),
-    );
+
+    const keys = intelKeysFor(map);
+    // Match the share the rest of the team is carrying rather than re-dealing everybody.
+    // Re-dealing would preserve the overlap knob exactly, but it would also rewrite every
+    // existing advisor's map mid-round - and an advisor whose mines move while they are
+    // describing them is worse than a newcomer with a slightly generous share.  Handing
+    // over the WHOLE field (what a one-advisor deal returns) would quietly switch the
+    // difficulty off, which is why this is sized rather than simply dealt.
+    const existing = Object.values(team.intel).map((share) => share.length);
+    const shareSize = existing.length
+      ? Math.min(keys.length, Math.round(existing.reduce((a, b) => a + b, 0) / existing.length))
+      : keys.length;
+
+    const rng = makeRng(this.randomInt(1 << 30));
+    const deck = keys.slice();
+    for (let i = deck.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      [deck[i], deck[j]] = [deck[j], deck[i]];
+    }
     action(() => {
-      team.intel = { ...team.intel, [player.playerId]: share[0] ?? [] };
+      team.intel = { ...team.intel, [player.playerId]: deck.slice(0, shareSize).sort() };
     })();
   }
 

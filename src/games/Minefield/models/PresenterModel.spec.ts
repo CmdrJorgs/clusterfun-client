@@ -1,5 +1,11 @@
 import { runInAction } from "mobx";
-import { ISessionHelper, instantiateGame, getPresenterTypeHelper, PresenterGameState } from "libs";
+import {
+  ISessionHelper,
+  instantiateGame,
+  getPresenterTypeHelper,
+  PresenterGameEvent,
+  PresenterGameState,
+} from "libs";
 import { MockTelemetryLogger } from "libs/telemetry/MockTelemetryLogger";
 import {
   MinefieldGameState,
@@ -121,6 +127,39 @@ describe("MinefieldPresenterModel - setup", () => {
     const { model } = makeModel();
     model.setTeamCount(99);
     expect(model.teams).toHaveLength(4);
+  });
+
+  // Regression, found by playing it: team assignment used to happen only in
+  // prepareFreshRound, so during Gathering every team card read "nobody yet" and the host
+  // could not pick an explorer at all - on the screen whose job is picking the explorer.
+  it("seats a player on a team as soon as they join, not at the next round", () => {
+    const { model } = makeModel();
+    addPlayer(model, "P0", "Player 0");
+    addPlayer(model, "P1", "Player 1");
+    expect(model.players.every((p) => p.teamId === -1)).toBe(true);
+
+    model.seatArrivals();
+
+    expect(model.players.every((p) => p.teamId === 0)).toBe(true);
+    expect(model.teamMembers(0)).toHaveLength(2);
+    // ...which is what makes the setup screen's explorer picker usable.
+    model.setExplorer(0, "P1");
+    expect(model.teams[0].explorerId).toBe("P1");
+  });
+
+  it("wires seating to the join event, so it happens without anybody calling it", async () => {
+    const { model } = makeModel();
+    model.reconstitute();
+    try {
+      const player = addPlayer(model, "P0", "Player 0");
+      // invokeEvent defers its dispatch through a timeout and hands back a promise - a
+      // synchronous assertion here passes for the wrong reason and then fails for the wrong
+      // reason too.
+      await model.invokeEvent(PresenterGameEvent.PlayerJoined, player);
+      expect(player.teamId).toBe(0);
+    } finally {
+      model.shutdown();
+    }
   });
 });
 
@@ -369,6 +408,37 @@ describe("MinefieldPresenterModel - reconnect", () => {
 
     expect(team.intel[advisor.playerId]).toBeDefined();
     expect(model.roleOf(advisor)).toBe("advisor");
+  });
+
+  // Regression: a late arrival used to be dealt as if they were the team's ONLY advisor,
+  // which hands back every key - so one person turning up late quietly switched the
+  // difficulty off for the whole team.
+  it("sizes a late arrival's share to match the team, instead of handing over the map", () => {
+    const { model } = makeModel();
+    for (let i = 0; i < 5; i++) addPlayer(model, `P${i}`, `Player ${i}`);
+    model.setDifficultyIndex(3); // Nightmare - zero overlap, so shares are thin
+    model.prepareFreshGame();
+    model.prepareFreshRound();
+
+    const team = model.teams[0];
+    const everyKey = model
+      .currentMap!.hazards.filter((h) => h.kind !== "invisible")
+      .map((h) => `h:${h.id}`)
+      .concat(model.currentMap!.walls.map((w) => `w:${w.id}`));
+    const typicalShare = model.advisorsOf(team)[0].playerId;
+    const typicalSize = team.intel[typicalShare].length;
+
+    const latecomer = addPlayer(model, "LATE", "Latecomer");
+    model.seatArrivals();
+
+    const share = team.intel["LATE"];
+    expect(share).toBeDefined();
+    expect(share.length).toBeGreaterThan(0);
+    expect(share.length).toBeLessThan(everyKey.length);
+    expect(Math.abs(share.length - typicalSize)).toBeLessThanOrEqual(1);
+    // Everyone else's map is left exactly as it was - no re-deal under their feet.
+    expect(team.intel[typicalShare].length).toBe(typicalSize);
+    expect(latecomer.teamId).toBe(0);
   });
 
   it("leaves a returning explorer in their own boots - ids are stable, nothing to migrate", () => {
