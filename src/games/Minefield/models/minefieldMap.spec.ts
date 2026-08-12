@@ -306,7 +306,9 @@ describe("generateMinefieldMap", () => {
     // The headline promise of the generator, checked across many seeds and both extremes of
     // the difficulty range - a party does not get to discover an unwinnable map.
     for (let seed = 0; seed < 25; seed++) {
-      const easy = generateMinefieldMap(options({ seed, mineCount: 6, mineKinds: 1, wallCount: 0 }));
+      const easy = generateMinefieldMap(
+        options({ seed, mineCount: 6, mineKinds: 1, wallCount: 0 }),
+      );
       const hard = generateMinefieldMap(
         options({ seed, mineCount: 26, mineKinds: 5, wallCount: 3, viablePaths: 1 }),
       );

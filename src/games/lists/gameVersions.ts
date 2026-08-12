@@ -3,6 +3,7 @@ import { EittrisVersion } from "games/Eittris/models/GameSettings";
 import { FaceOffVersion } from "games/FaceOff/models/GameSettings";
 import { PassTheAuxVersion } from "games/PassTheAux/models/GameSettings";
 import { LexibleVersion } from "games/Lexible/models/GameSettings";
+import { MinefieldVersion } from "games/Minefield/models/GameSettings";
 import { OneOhOneVersion } from "games/OneOhOne/models/GameSettings";
 import { PartyPixVersion } from "games/PartyPix/models/GameSettings";
 import { RetroSpectroVersion } from "games/RetroSpectro/models/GameSettings";
@@ -33,6 +34,7 @@ const GAME_VERSIONS: Record<string, string> = {
   PassTheAux: PassTheAuxVersion,
   FaceOff: FaceOffVersion,
   CollageBoard: CollageBoardVersion,
+  Minefield: MinefieldVersion,
   Stressato: StressatoVersion,
   Template: TemplateVersion,
 };

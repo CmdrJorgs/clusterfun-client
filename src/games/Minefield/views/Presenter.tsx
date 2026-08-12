@@ -1,15 +1,23 @@
 // The shared-screen view.  One page component per presenter game state, chosen by
-// renderSubScreen().  All of these are observers over the presenter model - they
-// render state; they never own it.
+// renderSubScreen().  All observers over the presenter model - they render state, never own it.
+//
+// The big screen is DELIBERATELY ignorant about the field: it draws the silhouette, the
+// start, the goal and each team's trail, and nothing else.  Cells, hazards and walls never
+// appear here, because everyone in the room can see this screen and half of them are not
+// supposed to know what is buried where.
 import React from "react";
 import { observer, inject } from "mobx-react";
 import styles from "./Presenter.module.css";
 import classNames from "classnames";
-import { makeObservable, observable } from "mobx";
 import MinefieldAssets from "../assets/Assets";
-import { MINEFIELD_VERSION_HISTORY } from "../models/GameSettings";
 import {
-  BaseAnimationController,
+  DIFFICULTY_PRESETS,
+  MAX_TEAMS,
+  MINEFIELD_VERSION_HISTORY,
+  TEAM_COLORS,
+  TEAM_NAMES,
+} from "../models/GameSettings";
+import {
   MediaHelper,
   UIProperties,
   PresenterGameEvent,
@@ -24,222 +32,281 @@ import {
   MinefieldPresenterModel,
   MinefieldGameState,
   MinefieldGameEvent,
+  MinefieldTeam,
 } from "../models/PresenterModel";
+import { MapPoint } from "../models/minefieldMap";
+import { Pt, polyPoints, trailPoints, viewBoxFor } from "./mapGeometry";
 
+const flatten = (points: MapPoint[]): number[] => {
+  const out: number[] = [];
+  for (const p of points) out.push(p.x, p.y);
+  return out;
+};
+
+// -------------------------------------------------------------------
+// The silhouette.  Shape, start, goal, and where everybody is - and that is the whole
+// contract.  A rival's ghost trail with a skull on the end is the one legitimate way to
+// learn where a mine is without an advisor telling you, which is why it is drawn.
+// -------------------------------------------------------------------
 @inject("appModel")
 @observer
-class GatheringPlayersPage extends React.Component<{ appModel?: MinefieldPresenterModel }> {
-  // -------------------------------------------------------------------
-  // render
-  // -------------------------------------------------------------------
+class SilhouetteMap extends React.Component<{ appModel?: MinefieldPresenterModel }> {
   render() {
     const { appModel } = this.props;
-    if (!appModel) return <div>NO APP MODEL</div>;
+    const map = appModel?.currentMap;
+    if (!appModel || !map) return <div className={styles.mapPlaceholder}>NO FIELD</div>;
+
+    const centers = new Map<number, Pt>(map.cells.map((c) => [c.id, c.center]));
+    const rings = map.outline.map(flatten);
+    const start = centers.get(map.startCell);
+    const goal = centers.get(map.goalCell);
 
     return (
-      <div>
-        <h3>Welcome to {appModel.name}</h3>
-        <p>This is the ClusterFun minefield game.</p>
-        <p>
-          To Join: go to http://{window.location.host} and enter this room code: {appModel.roomId}
-        </p>
-        {appModel.players.length > 0 ? (
-          <div>
-            <p style={{ fontWeight: 600 }}>Joined team members:</p>
-            <div className={styles.divRow}>
-              {appModel.players.map((player) => (
-                <div className={styles.nameBox} key={player.playerId}>
-                  <PlayerAvatar
-                    avatarId={player.avatarId}
-                    colorIndex={player.avatarColor}
-                    size={48}
-                  />{" "}
-                  {player.name}
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
+      <svg className={styles.silhouette} viewBox={viewBoxFor(rings, 40, 1.35)}>
+        {rings.map((ring, index) => (
+          <polygon
+            key={index}
+            points={polyPoints(ring)}
+            fill={index === 0 ? "#0f1410" : "#05070a"}
+            stroke="#4dff9e"
+            strokeWidth={index === 0 ? 7 : 4}
+            opacity={index === 0 ? 1 : 0.75}
+          />
+        ))}
 
-        {appModel.players.length < appModel.minPlayers ? (
-          <div>{`Waiting for at least ${appModel.minPlayers} players to join ...`}</div>
-        ) : (
-          <button className={styles.presenterButton} onClick={() => appModel.startGame()}>
-            Click here to start!
-          </button>
+        {appModel.teams.map((team) => {
+          const color = TEAM_COLORS[team.teamId] ?? "#ffffff";
+          const here = centers.get(team.run.cell);
+          return (
+            <g key={team.teamId}>
+              {team.run.ghosts.map((ghost, index) => (
+                <g key={index}>
+                  <polyline
+                    points={trailPoints(centers, ghost)}
+                    fill="none"
+                    stroke={color}
+                    strokeWidth={5}
+                    opacity={0.2}
+                    strokeDasharray="8 12"
+                  />
+                  {centers.has(ghost[ghost.length - 1]) && (
+                    <text
+                      x={centers.get(ghost[ghost.length - 1])!.x}
+                      y={centers.get(ghost[ghost.length - 1])!.y + 12}
+                      textAnchor="middle"
+                      fontSize={34}
+                      opacity={0.65}
+                    >
+                      💀
+                    </text>
+                  )}
+                </g>
+              ))}
+              <polyline
+                points={trailPoints(centers, team.run.path)}
+                fill="none"
+                stroke={color}
+                strokeWidth={9}
+                strokeLinejoin="round"
+                strokeLinecap="round"
+                opacity={0.95}
+              />
+              {here && (
+                <>
+                  <circle
+                    cx={here.x}
+                    cy={here.y}
+                    r={20}
+                    fill={color}
+                    stroke="#05070a"
+                    strokeWidth={5}
+                  />
+                  {team.run.armed.length > 0 && (
+                    <circle
+                      cx={here.x}
+                      cy={here.y}
+                      r={34}
+                      fill="none"
+                      stroke="#ff6a2b"
+                      strokeWidth={6}
+                    />
+                  )}
+                </>
+              )}
+            </g>
+          );
+        })}
+
+        {start && (
+          <text x={start.x} y={start.y + 16} textAnchor="middle" fontSize={54} fill="#7fb7ff">
+            ★
+          </text>
         )}
-      </div>
+        {goal && (
+          <text x={goal.x} y={goal.y + 18} textAnchor="middle" fontSize={58} fill="#7dff8a">
+            ⚑
+          </text>
+        )}
+      </svg>
     );
   }
 }
 
+// -------------------------------------------------------------------
+// Setup: difficulty, teams, and who is walking.
+// -------------------------------------------------------------------
 @inject("appModel")
 @observer
-class PausedGamePage extends React.Component<{ appModel?: MinefieldPresenterModel }> {
-  // -------------------------------------------------------------------
-  // resumeGame
-  // -------------------------------------------------------------------
-  private resumeGame = () => {
-    this.props.appModel?.resumeGame();
-  };
+class GatheringPage extends React.Component<
+  { appModel?: MinefieldPresenterModel },
+  { advanced: boolean }
+> {
+  constructor(props: { appModel?: MinefieldPresenterModel }) {
+    super(props);
+    this.state = { advanced: false };
+  }
 
-  // -------------------------------------------------------------------
-  // render
-  // -------------------------------------------------------------------
-  render() {
-    const { appModel } = this.props;
-    if (!appModel) return <div>NO APP MODEL</div>;
+  private knob(
+    label: string,
+    value: number,
+    min: number,
+    max: number,
+    step: number,
+    apply: (v: number) => void,
+  ) {
     return (
-      <div>
-        <p>{appModel.name} is paused</p>
-        <p>Current players in the room:</p>
-        <ul>
-          {appModel.players.map((player) => (
-            <li key={player.playerId}>
-              <PlayerAvatar avatarId={player.avatarId} colorIndex={player.avatarColor} size={32} />{" "}
-              {player.name}
-            </li>
-          ))}
-        </ul>
-        <button
-          className={styles.button}
-          disabled={appModel.players.length < appModel.minPlayers}
-          onClick={() => this.resumeGame()}
-        >
-          Resume Game
+      <div className={styles.knob} key={label}>
+        <span className={styles.knobLabel}>{label}</span>
+        <button className={styles.knobButton} onClick={() => apply(Math.max(min, value - step))}>
+          –
+        </button>
+        <span className={styles.knobValue}>{step < 1 ? `${Math.round(value * 100)}%` : value}</span>
+        <button className={styles.knobButton} onClick={() => apply(Math.min(max, value + step))}>
+          +
         </button>
       </div>
     );
   }
-}
 
-// An example of a scripted, multi-step animation (round intro).  Each step runs
-// after its delay; slide() drives smooth per-frame motion.
-class PlayStartAnimationController extends BaseAnimationController {
-  @observable announceText = " ";
-  @observable textLocation: string | null = null;
-  @observable showStatus: boolean = false;
-
-  constructor(onFinish: () => void) {
-    super(onFinish);
-    // Activate the @observable decorators - without this the observer
-    // components never see announceText/showStatus change.
-    makeObservable(this);
-
-    const textAnimation = (fraction: number) => {
-      const x = 0.01 + 0.01 * Math.sin(fraction * 20);
-      this.textLocation = `${(x * 100).toFixed(2)}%`;
-    };
-
-    // set up a set of sequential animations
-    // delay_s = how many seconds to wait before the action happens
-    this.run([
-      {
-        delay_s: 1.0,
-        id: "Introduce Round",
-        action: (c) => {
-          this.announceText = "Here we go...";
-          this.slide(1, textAnimation);
-        },
-      },
-      {
-        delay_s: 2.0,
-        id: "heads up!",
-        action: (c) => {
-          this.announceText = "Instructions are on your devices";
-        },
-      },
-      {
-        delay_s: 4.0,
-        id: "Now play",
-        action: (c) => {
-          this.showStatus = true;
-        },
-      },
-    ]);
-  }
-}
-
-@inject("appModel")
-@observer
-class PlayingPage extends React.Component<{
-  appModel?: MinefieldPresenterModel;
-  media: MediaHelper;
-}> {
-  private _playStartAnimation: PlayStartAnimationController;
-
-  // -------------------------------------------------------------------
-  // ctor
-  // -------------------------------------------------------------------
-  constructor(props: Readonly<{ appModel?: MinefieldPresenterModel; media: MediaHelper }>) {
-    super(props);
-    this._playStartAnimation = new PlayStartAnimationController(() => {});
-    props.appModel!.registerAnimation(this._playStartAnimation);
-
-    props.appModel!.onTick.subscribe("animate", (e) => this.animateFrame(e));
-  }
-
-  // -------------------------------------------------------------------
-  // animateFrame - render a single animation frame to the canvas
-  // -------------------------------------------------------------------
-  animateFrame = (elapsed_ms: number) => {
-    const canvas = document.getElementById("presenterGameCanvas") as HTMLCanvasElement;
-    if (!canvas) return;
-    const context = canvas.getContext("2d");
-    if (!context) return;
-
-    context.fillStyle = "#888888";
-    const w = canvas.width;
-    const h = canvas.height;
-    context.fillRect(0, 0, w, h);
-
-    this.props.appModel?.players.forEach((p) => {
-      const px = p.x * h;
-      const py = p.y * h * 0.9 + h * 0.05;
-      context.font = "50px serif";
-      let label = `${p.name} (${p.totalScore})`;
-      if (p.message !== "") label += ` says '${p.message}'`;
-      context.fillStyle = "#777777";
-      context.fillText(label, px + 4, py + 4);
-      context.fillStyle = p.colorStyle;
-      context.fillText(label, px, py);
-    });
-  };
-
-  // -------------------------------------------------------------------
-  // render
-  // -------------------------------------------------------------------
   render() {
     const { appModel } = this.props;
     if (!appModel) return <div>NO APP MODEL</div>;
+    const d = appModel.difficulty;
+
     return (
-      <div>
-        {this._playStartAnimation.showStatus ? (
-          <div className={styles.divRow}>
-            <div>
-              Playing round {appModel.currentRound}. Seconds left: {appModel.secondsLeftInStage}
-            </div>
-            <div className={styles.scoreStrip}>
-              {appModel.players.map((p) => (
-                <span className={styles.scoreItem} key={p.playerId}>
-                  <PlayerAvatar avatarId={p.avatarId} colorIndex={p.avatarColor} size={36} />{" "}
-                  {p.name}: {p.totalScore}
-                </span>
-              ))}
-            </div>
+      <div className={styles.setup}>
+        <div className={styles.joinPanel}>
+          <div className={styles.bigTitle}>MINEFIELD</div>
+          <div className={styles.joinLine}>
+            Join at <b>{window.location.host}</b> with room code <b>{appModel.roomId}</b>
           </div>
-        ) : (
-          <div style={{ paddingLeft: this._playStartAnimation.textLocation ?? "0px" }}>
-            &nbsp;{this._playStartAnimation.announceText}
+          <div className={styles.pitch}>
+            One of you walks it blind. The rest of you can see the mines — but only some of them.
+            Talk fast.
           </div>
-        )}
-        <div className={styles.gameCanvasFrame}>
-          <canvas
-            className={styles.gameCanvas}
-            width="1200px"
-            height="700px"
-            id="presenterGameCanvas"
-          />
+          <div className={styles.roster}>
+            {appModel.players.length === 0 && (
+              <span className={styles.dim}>Waiting for players…</span>
+            )}
+            {appModel.players.map((player) => (
+              <div className={styles.nameBox} key={player.playerId}>
+                <PlayerAvatar
+                  avatarId={player.avatarId}
+                  colorIndex={player.avatarColor}
+                  size={44}
+                />
+                <span className={player.isConnected ? "" : styles.dim}>{player.name}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className={styles.controlPanel}>
+          <div className={styles.sectionTitle}>DIFFICULTY</div>
+          <div className={styles.presetRow}>
+            {DIFFICULTY_PRESETS.map((preset, index) => (
+              <button
+                key={preset.name}
+                className={classNames(
+                  styles.preset,
+                  appModel.difficultyIndex === index && styles.presetOn,
+                )}
+                onClick={() => appModel.setDifficultyIndex(index)}
+              >
+                {preset.name}
+              </button>
+            ))}
+          </div>
+          <div className={styles.blurb}>
+            <b>{d.name}</b> — {d.blurb}
+          </div>
+
+          <button
+            className={styles.advancedToggle}
+            onClick={() => this.setState({ advanced: !this.state.advanced })}
+          >
+            {this.state.advanced ? "▾" : "▸"} Advanced
+          </button>
+          {this.state.advanced && (
+            <div className={styles.knobs}>
+              {this.knob("Mines", d.mineCount, 0, 40, 1, (v) =>
+                appModel.updateDifficulty({ mineCount: v }),
+              )}
+              {this.knob("Mine types", d.mineKinds, 1, 5, 1, (v) =>
+                appModel.updateDifficulty({ mineKinds: v }),
+              )}
+              {this.knob("Missing cells", d.holeCount, 0, 8, 1, (v) =>
+                appModel.updateDifficulty({ holeCount: v }),
+              )}
+              {this.knob("Walls", d.wallCount, 0, 3, 1, (v) =>
+                appModel.updateDifficulty({ wallCount: v }),
+              )}
+              {this.knob("Viable paths", d.viablePaths, 1, 4, 1, (v) =>
+                appModel.updateDifficulty({ viablePaths: v }),
+              )}
+              {this.knob("Intel overlap", d.intelOverlap, 0, 1, 0.25, (v) =>
+                appModel.updateDifficulty({ intelOverlap: v }),
+              )}
+            </div>
+          )}
+
+          <div className={styles.sectionTitle}>TEAMS</div>
+          <div className={styles.presetRow}>
+            {Array.from({ length: MAX_TEAMS }, (_, i) => i + 1).map((count) => (
+              <button
+                key={count}
+                className={classNames(
+                  styles.preset,
+                  appModel.teamCount === count && styles.presetOn,
+                )}
+                onClick={() => appModel.setTeamCount(count)}
+              >
+                {count}
+              </button>
+            ))}
+            <button
+              className={styles.advancedToggle}
+              onClick={() => appModel.randomizeAllExplorers()}
+            >
+              🎲 Random explorers
+            </button>
+          </div>
+
+          <div className={styles.teamGrid}>
+            {appModel.teams.map((team) => (
+              <TeamSetupCard key={team.teamId} team={team} />
+            ))}
+          </div>
+
+          <button
+            className={styles.startButton}
+            disabled={appModel.players.length < appModel.minPlayers}
+            onClick={() => appModel.startGame()}
+          >
+            {appModel.players.length < appModel.minPlayers
+              ? `Need ${appModel.minPlayers} players`
+              : "START"}
+          </button>
         </div>
       </div>
     );
@@ -248,38 +315,45 @@ class PlayingPage extends React.Component<{
 
 @inject("appModel")
 @observer
-class EndOfRoundPage extends React.Component<{ appModel?: MinefieldPresenterModel }> {
-  // -------------------------------------------------------------------
-  // render
-  // -------------------------------------------------------------------
+class TeamSetupCard extends React.Component<{
+  appModel?: MinefieldPresenterModel;
+  team: MinefieldTeam;
+}> {
   render() {
-    const { appModel } = this.props;
-    if (!appModel) return <div>NO APP MODEL</div>;
+    const { appModel, team } = this.props;
+    if (!appModel) return null;
+    const members = appModel.teamMembers(team.teamId);
+    const color = TEAM_COLORS[team.teamId] ?? "#fff";
 
-    const winners = appModel.winners;
     return (
-      <div>
-        <div>End of round {appModel.currentRound}</div>
-        {appModel.gameState === GeneralGameState.GameOver ? (
-          <div>
-            <div className={styles.winnerBanner}>
-              {winners.map((w) => (
-                <PlayerAvatar
-                  avatarId={w.avatarId}
-                  colorIndex={w.avatarColor}
-                  size={64}
-                  key={w.playerId}
-                />
-              ))}{" "}
-              {winners.length === 1
-                ? `🏆 ${winners[0].name} wins with ${winners[0].totalScore} points!`
-                : `🏆 It's a tie: ${winners.map((w) => w.name).join(" & ")}`}
-            </div>
-            <div>The game is over...</div>
-            <button onClick={() => appModel.startGame()}>Play again, same players</button>
-          </div>
-        ) : (
-          <button onClick={() => appModel.startNextRound()}>Start next round</button>
+      <div className={styles.teamCard} style={{ borderColor: color }}>
+        <div className={styles.teamName} style={{ color }}>
+          {TEAM_NAMES[team.teamId] ?? `Team ${team.teamId + 1}`}
+        </div>
+        {members.length === 0 && <div className={styles.dim}>nobody yet</div>}
+        {members.map((player) => (
+          <button
+            key={player.playerId}
+            className={classNames(
+              styles.memberRow,
+              team.explorerId === player.playerId && styles.memberExplorer,
+            )}
+            onClick={() => appModel.setExplorer(team.teamId, player.playerId)}
+          >
+            <PlayerAvatar avatarId={player.avatarId} colorIndex={player.avatarColor} size={32} />
+            <span>{player.name}</span>
+            {team.explorerId === player.playerId && (
+              <span className={styles.bootTag}>EXPLORER</span>
+            )}
+          </button>
+        ))}
+        {members.length > 0 && (
+          <button
+            className={styles.advancedToggle}
+            onClick={() => appModel.randomizeExplorer(team.teamId)}
+          >
+            🎲 random
+          </button>
         )}
       </div>
     );
@@ -287,7 +361,217 @@ class EndOfRoundPage extends React.Component<{ appModel?: MinefieldPresenterMode
 }
 
 // -------------------------------------------------------------------
-// Presenter Page
+// Briefing: who is walking, and one last look at the shape before it starts.
+// -------------------------------------------------------------------
+@inject("appModel")
+@observer
+class BriefingPage extends React.Component<{ appModel?: MinefieldPresenterModel }> {
+  render() {
+    const { appModel } = this.props;
+    if (!appModel) return null;
+    return (
+      <div className={styles.playArea}>
+        <div className={styles.mapPane}>
+          <SilhouetteMap />
+        </div>
+        <div className={styles.sidePane}>
+          <div className={styles.roundTag}>
+            ROUND {appModel.currentRound} / {appModel.totalRounds}
+          </div>
+          <div className={styles.briefTitle}>BRIEFING</div>
+          <div className={styles.pitch}>
+            Explorers: your phone shows only what you can reach. Advisors: you each hold part of the
+            map. Nothing is labelled — agree on what to call things.
+          </div>
+          {appModel.teams.map((team) => {
+            const explorer = appModel.explorerOf(team);
+            return (
+              <div
+                key={team.teamId}
+                className={styles.briefTeam}
+                style={{ borderColor: TEAM_COLORS[team.teamId] }}
+              >
+                <span style={{ color: TEAM_COLORS[team.teamId] }}>
+                  {TEAM_NAMES[team.teamId] ?? `Team ${team.teamId + 1}`}
+                </span>
+                <span className={styles.bootTag}>
+                  {explorer ? `${explorer.name} is walking` : "no explorer"}
+                </span>
+                <span className={styles.dim}>{appModel.advisorsOf(team).length} advising</span>
+              </div>
+            );
+          })}
+          <div className={styles.clock}>{appModel.secondsLeftInStage}</div>
+        </div>
+      </div>
+    );
+  }
+}
+
+// -------------------------------------------------------------------
+// The round itself.
+// -------------------------------------------------------------------
+@inject("appModel")
+@observer
+class RunningPage extends React.Component<{ appModel?: MinefieldPresenterModel }> {
+  render() {
+    const { appModel } = this.props;
+    if (!appModel) return null;
+    const minutes = Math.floor(appModel.secondsLeftInStage / 60);
+    const seconds = `${appModel.secondsLeftInStage % 60}`.padStart(2, "0");
+
+    return (
+      <div className={styles.playArea}>
+        <div className={styles.mapPane}>
+          <SilhouetteMap />
+        </div>
+        <div className={styles.sidePane}>
+          <div className={styles.roundTag}>
+            ROUND {appModel.currentRound} / {appModel.totalRounds}
+          </div>
+          <div
+            className={classNames(styles.clock, appModel.secondsLeftInStage <= 30 && styles.urgent)}
+          >
+            {minutes}:{seconds}
+          </div>
+          {appModel.teams.map((team) => {
+            const explorer = appModel.explorerOf(team);
+            const color = TEAM_COLORS[team.teamId] ?? "#fff";
+            return (
+              <div key={team.teamId} className={styles.liveTeam} style={{ borderColor: color }}>
+                <div className={styles.liveTeamHead}>
+                  <span style={{ color }}>
+                    {TEAM_NAMES[team.teamId] ?? `Team ${team.teamId + 1}`}
+                  </span>
+                  {team.run.reachedGoal && <span className={styles.homeTag}>HOME</span>}
+                  {team.run.armed.length > 0 && !team.run.reachedGoal && (
+                    <span className={styles.armedTag}>⚠ MINE ARMED</span>
+                  )}
+                </div>
+                <div className={styles.liveTeamBody}>
+                  <span className={explorer?.isConnected === false ? styles.warn : ""}>
+                    {explorer
+                      ? explorer.isConnected
+                        ? explorer.name
+                        : `${explorer.name} — DISCONNECTED`
+                      : "no explorer"}
+                  </span>
+                  <span className={styles.dim}>
+                    💀 {team.run.deaths} · {team.run.steps} steps
+                  </span>
+                </div>
+                {explorer && !explorer.isConnected && (
+                  <button
+                    className={styles.advancedToggle}
+                    onClick={() => appModel.randomizeExplorer(team.teamId)}
+                  >
+                    Reassign explorer
+                  </button>
+                )}
+              </div>
+            );
+          })}
+          <button className={styles.advancedToggle} onClick={() => appModel.skipRound()}>
+            Skip round
+          </button>
+        </div>
+      </div>
+    );
+  }
+}
+
+// -------------------------------------------------------------------
+// Between rounds, and the end.
+// -------------------------------------------------------------------
+@inject("appModel")
+@observer
+class RoundScorePage extends React.Component<{ appModel?: MinefieldPresenterModel }> {
+  render() {
+    const { appModel } = this.props;
+    if (!appModel) return null;
+    return (
+      <div className={styles.playArea}>
+        <div className={styles.mapPane}>
+          <SilhouetteMap />
+        </div>
+        <div className={styles.sidePane}>
+          <div className={styles.briefTitle}>ROUND {appModel.currentRound}</div>
+          <div className={styles.pitch}>
+            Field declassified — check your phone to see what you were walking through.
+          </div>
+          {appModel.rankedTeams.map((team) => (
+            <div
+              key={team.teamId}
+              className={styles.liveTeam}
+              style={{ borderColor: TEAM_COLORS[team.teamId] }}
+            >
+              <div className={styles.liveTeamHead}>
+                <span style={{ color: TEAM_COLORS[team.teamId] }}>
+                  {TEAM_NAMES[team.teamId] ?? `Team ${team.teamId + 1}`}
+                </span>
+                <span className={styles.score}>{team.score}</span>
+              </div>
+              <div className={styles.liveTeamBody}>
+                <span>{team.run.reachedGoal ? "Reached the goal" : "Did not make it"}</span>
+                <span className={styles.dim}>
+                  💀 {team.run.deaths} · {team.run.steps} steps
+                </span>
+              </div>
+            </div>
+          ))}
+          <div className={styles.clock}>{appModel.secondsLeftInStage}</div>
+        </div>
+      </div>
+    );
+  }
+}
+
+@inject("appModel")
+@observer
+class GameOverPage extends React.Component<{ appModel?: MinefieldPresenterModel }> {
+  render() {
+    const { appModel } = this.props;
+    if (!appModel) return null;
+    const winners = appModel.winners;
+    return (
+      <div className={styles.gameOver}>
+        <div className={styles.bigTitle}>
+          {winners.length === 1 ? `${TEAM_NAMES[winners[0].teamId] ?? "Team"} WINS` : "IT'S A DRAW"}
+        </div>
+        <div className={styles.finalGrid}>
+          {appModel.rankedTeams.map((team) => (
+            <div
+              key={team.teamId}
+              className={styles.teamCard}
+              style={{ borderColor: TEAM_COLORS[team.teamId] }}
+            >
+              <div className={styles.teamName} style={{ color: TEAM_COLORS[team.teamId] }}>
+                {TEAM_NAMES[team.teamId] ?? `Team ${team.teamId + 1}`}
+              </div>
+              <div className={styles.score}>{team.score}</div>
+              {appModel.teamMembers(team.teamId).map((player) => (
+                <div className={styles.nameBox} key={player.playerId}>
+                  <PlayerAvatar
+                    avatarId={player.avatarId}
+                    colorIndex={player.avatarColor}
+                    size={36}
+                  />
+                  <span>{player.name}</span>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+        <button className={styles.startButton} onClick={() => appModel.playAgain(false)}>
+          PLAY AGAIN
+        </button>
+      </div>
+    );
+  }
+}
+
+// -------------------------------------------------------------------
+// Presenter shell
 // -------------------------------------------------------------------
 @inject("appModel")
 @observer
@@ -297,124 +581,106 @@ export default class Presenter extends React.Component<{
 }> {
   media: MediaHelper;
 
-  // -------------------------------------------------------------------
-  // ctor
-  // -------------------------------------------------------------------
   constructor(props: Readonly<{ appModel?: MinefieldPresenterModel; uiProperties: UIProperties }>) {
     super(props);
-
     const { appModel } = this.props;
 
-    // Set up sound effects
     this.media = new MediaHelper();
     for (let soundName in MinefieldAssets.sounds) {
       this.media.loadSound((MinefieldAssets.sounds as any)[soundName]);
     }
-
     const sfxVolume = 1.0;
 
-    // Play a countdown alert when a round is nearly out of time
-    let timeAlertLoaded = false;
-    appModel?.onTick.subscribe("Timer Watcher", () => {
-      if (appModel!.secondsLeftInStage > 10) timeAlertLoaded = true;
-      if (
-        appModel!.gameState === MinefieldGameState.Playing &&
-        timeAlertLoaded &&
-        appModel!.secondsLeftInStage <= 10
-      ) {
-        timeAlertLoaded = false;
-        this.media.repeatSound(MinefieldAssets.sounds.ding, 5, 100);
-      }
-    });
-
-    // Game events -> sounds.  Subscribe to model events here so audio
-    // stays in the view layer, out of the game logic.
+    // Model events -> sounds. Audio stays in the view layer, out of the game logic.
     appModel?.subscribe(PresenterGameEvent.PlayerJoined, "play joined sound", () =>
       this.media.playSound(MinefieldAssets.sounds.hello, { volume: sfxVolume * 0.2 }),
     );
-    appModel?.subscribe(MinefieldGameEvent.ResponseReceived, "play response received sound", () =>
-      this.media.playSound(MinefieldAssets.sounds.response, { volume: sfxVolume }),
+    appModel?.subscribe(MinefieldGameEvent.TeamStepped, "play step sound", () =>
+      this.media.playSound(MinefieldAssets.sounds.ding, { volume: sfxVolume * 0.18 }),
     );
-    appModel?.subscribe(MinefieldGameEvent.ColorChanged, "play color changed sound", () =>
-      this.media.playSound(MinefieldAssets.sounds.ding, { volume: sfxVolume * 0.5 }),
+    appModel?.subscribe(MinefieldGameEvent.TeamArmedMine, "play armed sound", () =>
+      this.media.repeatSound(MinefieldAssets.sounds.ding, 2, 120),
     );
-    appModel?.subscribe(MinefieldGameEvent.ScoreChanged, "play score sound", () =>
-      this.media.playSound(MinefieldAssets.sounds.score, { volume: sfxVolume * 0.6 }),
+    appModel?.subscribe(MinefieldGameEvent.TeamThrewSwitch, "play switch sound", () =>
+      this.media.playSound(MinefieldAssets.sounds.response, { volume: sfxVolume * 0.7 }),
+    );
+    appModel?.subscribe(MinefieldGameEvent.TeamFroze, "play freeze sound", () =>
+      this.media.playSound(MinefieldAssets.sounds.response, { volume: sfxVolume * 0.5 }),
+    );
+    appModel?.subscribe(MinefieldGameEvent.TeamDied, "play death sound", () =>
+      this.media.repeatSound(MinefieldAssets.sounds.ding, 5, 70),
+    );
+    appModel?.subscribe(MinefieldGameEvent.TeamReachedGoal, "play goal sound", () =>
+      this.media.playSound(MinefieldAssets.sounds.score, { volume: sfxVolume * 0.8 }),
     );
     appModel?.subscribe(MinefieldGameEvent.WinnerAnnounced, "play winner sound", () =>
       this.media.playSound(MinefieldAssets.sounds.winner, { volume: sfxVolume }),
     );
   }
 
-  // -------------------------------------------------------------------
-  // renderSubScreen
-  // -------------------------------------------------------------------
   private renderSubScreen() {
     const { appModel } = this.props;
-    if (!appModel) {
-      return <div>NO APP MODEL</div>;
-    }
+    if (!appModel) return <div>NO APP MODEL</div>;
 
     switch (appModel.gameState) {
       case PresenterGameState.Gathering:
-        return <GatheringPlayersPage />;
-      case MinefieldGameState.Playing:
-        return <PlayingPage media={this.media} />;
-      case MinefieldGameState.EndOfRound:
+        return <GatheringPage />;
+      case MinefieldGameState.Briefing:
+        return <BriefingPage />;
+      case MinefieldGameState.Running:
+        return <RunningPage />;
+      case MinefieldGameState.RoundScore:
+        return <RoundScorePage />;
       case GeneralGameState.GameOver:
-        return <EndOfRoundPage />;
+        return <GameOverPage />;
       case GeneralGameState.Paused:
-        return <PausedGamePage />;
+        return (
+          <div className={styles.gameOver}>
+            <div className={styles.bigTitle}>PAUSED</div>
+            <button className={styles.startButton} onClick={() => appModel.resumeGame()}>
+              Resume
+            </button>
+          </div>
+        );
       default:
-        return <div>Whoops! No display for this state: {appModel.gameState}</div>;
+        return <div>Unexpected state: {appModel.gameState}</div>;
     }
   }
 
-  // -------------------------------------------------------------------
-  // renderFrame
-  // -------------------------------------------------------------------
   private renderFrame() {
     const { appModel } = this.props;
-    if (!appModel) return <div>NO APP MODEL</div>;
+    if (!appModel) return null;
     return (
-      <div className={classNames(styles.divRow)}>
-        <button
-          className={classNames(styles.button)}
-          style={{ marginRight: "30px" }}
-          onClick={() => appModel.quitApp()}
-        >
+      <div className={styles.frame}>
+        <button className={styles.frameButton} onClick={() => appModel.quitApp()}>
           Quit
         </button>
         <button
-          className={classNames(styles.button)}
+          className={styles.frameButton}
           disabled={appModel.gameState === PresenterGameState.Gathering}
-          style={{ marginRight: "30px" }}
           onClick={() => appModel.pauseGame()}
         >
           Pause
         </button>
-        <div className={classNames(styles.roomCode)}>Room Code: {appModel.roomId}</div>
+        <div className={styles.frameSpacer} />
+        <div className={styles.frameRoom}>Room {appModel.roomId}</div>
         <DevUI context={appModel} children={<div></div>} />
-        <div style={{ marginLeft: "50px" }}>
-          <GameVersionTag title="Minefield" history={MINEFIELD_VERSION_HISTORY} showChanges />
-        </div>
+        <GameVersionTag title="Minefield" history={MINEFIELD_VERSION_HISTORY} showChanges />
       </div>
     );
   }
 
-  // -------------------------------------------------------------------
-  // render
-  // -------------------------------------------------------------------
   render() {
     return (
       <UINormalizer
         className={styles.gamepresenter}
+        backdropClassName={styles.gamepresenter}
         uiProperties={this.props.uiProperties}
         virtualHeight={1080}
         virtualWidth={1920}
       >
         {this.renderFrame()}
-        <div style={{ margin: "40px" }}>{this.renderSubScreen()}</div>
+        <div className={styles.stage}>{this.renderSubScreen()}</div>
       </UINormalizer>
     );
   }

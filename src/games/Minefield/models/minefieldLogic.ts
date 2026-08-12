@@ -12,12 +12,7 @@
 // new, which is what makes "two movements to get clear" mean the same thing in both.
 // ==========================================================================================
 
-import {
-  Hazard,
-  HazardKind,
-  MinefieldMapData,
-  wallBetween,
-} from "./minefieldMap";
+import { Hazard, HazardKind, MinefieldMapData, wallBetween } from "./minefieldMap";
 import { FREEZE_MS, MAX_GHOST_TRAILS, MOTION_FUSE_STEPS } from "./GameSettings";
 
 // ------------------------------------------------------------------------------------------

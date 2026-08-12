@@ -333,7 +333,9 @@ describe("scoring", () => {
   });
 
   it("pays nothing for a round that never reached the goal", () => {
-    expect(teamRoundScore({ reachedGoal: false, secondsLeft: 200, deaths: 0 }, SCORE_RULES)).toBe(0);
+    expect(teamRoundScore({ reachedGoal: false, secondsLeft: 200, deaths: 0 }, SCORE_RULES)).toBe(
+      0,
+    );
   });
 
   it("never goes negative, however catastrophic the round", () => {

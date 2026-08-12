@@ -20,6 +20,10 @@ import {
   getLexiblePresenterTypeHelper,
 } from "games/Lexible/models/PresenterModel";
 import {
+  MinefieldPresenterModel,
+  getMinefieldPresenterTypeHelper,
+} from "games/Minefield/models/PresenterModel";
+import {
   OneOhOnePresenterModel,
   getOneOhOnePresenterTypeHelper,
 } from "games/OneOhOne/models/PresenterModel";
@@ -82,6 +86,11 @@ const GAMES: GameUnderTest[] = [
     name: "Lexible",
     Model: LexiblePresenterModel as any,
     typeHelper: getLexiblePresenterTypeHelper,
+  },
+  {
+    name: "Minefield",
+    Model: MinefieldPresenterModel as any,
+    typeHelper: getMinefieldPresenterTypeHelper,
   },
   {
     name: "OneOhOne",

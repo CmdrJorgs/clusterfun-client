@@ -1,159 +1,70 @@
-# MinefieldGame — the starting point for new ClusterFun games
+# Minefield
 
-MinefieldGame ("Minefield" in the debug lobby) is a small but complete, working game that
-demonstrates every best practice a ClusterFun game should follow. **New games start as a
-copy of this folder.** It is registered in the debug game list only, so it never ships to
-players.
+A co-operative game of asymmetric information for ClusterFun. One player walks a minefield
+they cannot see. Everyone else on their team can see it — but each of them only holds a
+**fragment** of the intel, and nobody holds all of it. The team has to talk.
 
-Playing it: everyone joins from their phone, taps their screen to move their name around
-the presenter's canvas (each tap scores a point), and can recolor their name or send a
-message. After the final round the highest scorer wins. Not much of a game — but it
-exercises the whole framework:
+See [DESIGN.md](DESIGN.md) for the full spec and the decisions behind it.
 
-- **Presenter/client split** — the presenter model owns all state; the client model only
-  sends typed input messages and mirrors what it needs.
-- **Typed message endpoints** ([models/minefieldEndpoints.ts](models/minefieldEndpoints.ts)) —
-  the complete wire API in one file, with named request/response interfaces, both
-  request/response (`Onboard`) and fire-and-forget (`Tap`, `ColorChange`, `Message`) styles.
-- **Pure, unit-tested game rules** ([models/minefieldLogic.ts](models/minefieldLogic.ts) +
-  [minefieldLogic.spec.ts](models/minefieldLogic.spec.ts)) — rule decisions live in plain
-  functions with Jest specs; the models stay thin.
-- **Save/restore** — type helpers in both models make refresh-resume work (refresh the page
-  mid-game; the game continues where it was).
-- **State machines** — presenter states (Gathering → Playing → EndOfRound → GameOver) and
-  client states, each mapped to a sub-screen component in the views.
-- **Player avatars** — the standard feature: players pick an avatar in the lobby; it rides
-  the Join message onto `player.avatarId`, and the views render it with the shared
-  `PlayerAvatar` component (join list, in-game scoreboard, winner banner, phone top bar).
-- **Sounds & events** — model events (`ScoreChanged`, `WinnerAnnounced`, ...) trigger sounds
-  in the view layer: join (hello.mp3), message (response.mp3), countdown/color (ding.wav),
-  score increase (score.wav), and winner announcement (winner.wav).
-- **Animations** — a scripted round-intro animation and per-frame canvas drawing on both
-  presenter and client.
+## How to play
 
-## How to add a new game by hand
+- **2–16 players**, in **1–4 teams**, over **3 rounds** (about 20 minutes).
+- The host picks a difficulty on the big screen — **Recruit / Sapper / Veteran / Nightmare**,
+  or opens **Advanced** and sets each knob by hand — and picks each team's explorer (or hits
+  🎲 for a random one). The boots pass to somebody new each round.
+- **If you are the Explorer:** your phone shows your current cell and the cells you can step
+  to, drawn to scale in their real positions. That is all. You cannot see the map and you
+  cannot see what is buried anywhere. Describe what is in front of you and do as you are told.
+- **If you are an Advisor:** your phone shows the whole field with **your share** of the
+  mines, walls and switches marked. Your teammates hold the rest. Pool it out loud and talk
+  your explorer across.
+- The big screen shows the **outline** of the field, the start ★, the goal ⚑ and each team's
+  trail. It never shows cells or hazards — everyone can see it, and half the room is not
+  supposed to know what is out there.
 
-Suppose your game is called **Quizzo**.
+**Nothing on any screen names a cell.** No compass, no grid references, no numbers. Working
+out how to say "that one, the pointy one — no, the _other_ pointy one" while a clock runs is
+the game. The only thing you get for free is that up is up on everybody's screen.
 
-1. **Copy the folder.** Duplicate `src/games/MinefieldGame` to `src/games/Quizzo`.
-   Delete `CLAUDE.md` from the copy (it is the minefield's authoring guide, not part of a
-   game) and replace this README with a description of your game.
+## What is out there
 
-2. **Rename everything.** In the copied folder, replace every identifier consistently:
-   - `Minefield` → `Quizzo` (class names: `QuizzoPresenterModel`, `QuizzoPlayer`, enums,
-     type-helper names, `minefieldEndpoints.ts` → `quizzoEndpoints.ts`, etc.)
-   - `minefield` → `quizzo` (endpoint routes like `/games/quizzo/actions/...`)
-   - The strings passed to the model constructors (`super("Minefield", ...)`,
-     `super("MinefieldClient", ...)`) and the serializer type names inside both type
-     helpers (`rootTypeName`, `getTypeName`, `constructType`) — these are saved into
-     checkpoints, so they must match the class renames.
+| Hazard              | What it does                                                                                                                                   |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Standard mine**   | Kills instantly.                                                                                                                               |
+| **Multi-step mine** | Takes 2–5 steps before it kills. Advisors are shown the total and it is **never** counted down — remembering is your job.                      |
+| **Freeze mine**     | Ten seconds where you cannot move at all.                                                                                                      |
+| **Motion mine**     | Arms when you step _next to_ it, and goes off two movements later. Get clear and it blows harmlessly; the crater is then safe to walk through. |
+| **Invisible mine**  | Not on anybody's map. Arms when trodden on, then behaves like a motion mine.                                                                   |
+| **Wall + switch**   | A thick line you cannot cross until somebody steps on its switch — usually in the wrong direction entirely.                                    |
+| **Missing cells**   | Holes in the field.                                                                                                                            |
 
-3. **Register the game.** Add an entry in
-   [src/games/lists/gamesListDebug.ts](../lists/gamesListDebug.ts) (debug-only while you
-   develop; move it to `gamesListRelease.ts` when it's ready). Optionally add a card entry
-   in `src/lobby/LobbyPresentation.ts` (blurb, player count, play time). To appear in
-   production the game must **also** be added to the server's `game_manifest`.
+Die and you go back to the start with the field reset — but the deaths are your score, and
+your failed run stays on the big screen as a ghost trail with a skull where it ended. Rival
+teams can read those too.
 
-4. **Run it.** `npm start` opens the Test Lobby (presenter + four fake phones on one page,
-   no server needed). Pick your game and make sure the minefield gameplay still works after
-   the rename — refresh mid-game to prove save/restore survived (a wrong type-helper name
-   is invisible until you refresh).
+## Scoring
 
-5. **Now make it your game.** The natural order:
-   - `models/GameSettings.ts` — your tuning constants.
-   - `models/quizzoEndpoints.ts` — design the message API first: what do phones send, what
-     does the presenter push or answer? Keep payloads small.
-   - `models/quizzoLogic.ts` (+ `.spec.ts`) — the pure rules: scoring, win conditions,
-     validation. Write the specs alongside.
-   - `models/PresenterModel.ts` — player fields, game states, round lifecycle
-     (`prepareFreshGame` / `prepareFreshRound` / `startNextRound` / `handleTick`), and a
-     handler per endpoint. Keep the type helper in sync with every new class you add.
-   - `models/ClientModel.ts` — input actions and `requestGameStateFromPresenter` (rebuild
-     the phone's whole state from the onboard response).
-   - `views/Presenter.tsx` and `views/Client.tsx` — one sub-screen component per state.
-     Show `PlayerAvatar` wherever players are listed.
-   - `assets/` — swap in your logo and sounds; keep `Assets.ts` as the manifest.
+Reaching the goal is 1000 points plus 5 per second left, minus 150 per death (never below
+zero). Ties break on fewest deaths, then fewest steps, then who got there first.
 
-6. **Test and format before committing.** `npm test` (your specs plus the whole suite) and
-   `npm run format`. Add a serializer round-trip or state-transition spec when your model
-   grows new serializable classes.
+## Running it
 
-### Things that bite people
+`npm start` → Test Lobby → **Minefield**. Two players is enough to play (one explorer, one
+advisor); four or more is where it gets good, because that is when the intel starts being
+genuinely split.
 
-- **Forgetting the type helper.** Every class stored on a model must be registered in
-  `getTypeName`/`constructType`, or refresh-resume silently drops it.
-- **Fat messages.** Clients are phones. Send ids and small deltas, not whole objects, and
-  use the onboard request for full-state rebuilds.
-- **Authoritative logic on the client.** The presenter decides everything; the client only
-  proposes. If the client "knows" the score, it's a display copy.
-- **Missing `saveCheckpoint()`.** Call it after any state change that should survive a
-  refresh.
-- **New states without screens.** Every value you put in `gameState` needs a case in the
-  view's `renderSubScreen` on the affected role — the default case is an error screen.
+## Where the code lives
 
-## Analytics
+| File                           | What it holds                                                                                                                                     |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `models/minefieldMap.ts`       | Field generation (jittered lattice → merge → carve), plus the two checks that make a field fair: `countDisjointRoutes` and `findSafeRoute`. Pure. |
+| `models/minefieldLogic.ts`     | The rules: step resolution, fuses, intel distribution, scoring. Pure.                                                                             |
+| `models/minefieldEndpoints.ts` | The wire API, and the redaction contract.                                                                                                         |
+| `models/PresenterModel.ts`     | The authority: the field, every team's run, every advisor's share.                                                                                |
+| `models/ClientModel.ts`        | Thin. Taps in, whatever this role is allowed to see out.                                                                                          |
+| `views/MosaicMap.tsx`          | The advisor's map. `views/Presenter.tsx` draws the silhouette.                                                                                    |
+| `views/mapGeometry.ts`         | Drawing helpers shared by both roles' screens.                                                                                                    |
 
-You get the important events for free. `ClusterfunPresenterModel` and `ClusterfunClientModel`
-already report game starts and endings (with player count, duration, and whether it was
-played to completion), joins, rejoins, quits and denied joins — **do not re-send those**.
-
-For anything specific to your game, `this.analytics` is on every model:
-
-```ts
-this.analytics.track("word_played", { length: 7, bonus: true });
-```
-
-The game name, an anonymous per-browser device id, and whether you are the host or a client
-are attached automatically. Keep parameters flat (strings, numbers, booleans) — GA4 takes
-nothing else. In the Test Lobby these print to the browser console as
-`Analytics(<game>): <event> {...}`, so you can check them without a GA login. See the
-client's CLAUDE.md "Analytics" section for the full event list.
-
-## How to add a new game with Claude
-
-This folder ships with a [CLAUDE.md](CLAUDE.md) that turns Claude into a game-building
-assistant: it instructs Claude to **interview you about the game design first**, write a
-short design doc, and only then copy and refactor the minefield. To use it, just ask
-Claude Code (from the repo or client directory) something like:
-
-> Create a new game from the MinefieldGame minefield. Read
-> `src/games/MinefieldGame/CLAUDE.md` first and follow its process.
-
-Tips for good results:
-
-- **Lead with the elevator pitch, but let the interview happen.** One or two sentences of
-  concept ("a bluffing trivia game where players submit fake answers") is enough to start;
-  answer Claude's interview questions rather than front-loading a spec — the questions
-  cover the decisions that actually shape the code (rounds, timers, screens, scoring,
-  what's secret on phones vs. public on the big screen).
-- **Ask for thin slices.** "Get joining + one playable round working in the Test Lobby
-  first, then we'll add scoring" beats "build the whole game."
-- **Hold Claude to the house rules.** The minefield's CLAUDE.md already requires it, but
-  it never hurts to repeat: pure logic with specs, typed endpoints, type helpers kept in
-  sync, `npm test` + `npm run format` before every commit, and a refresh-mid-game
-  save/restore check in the Test Lobby.
-- **Verify in the Test Lobby yourself.** Claude can run the suite, but you can see the
-  game. `npm start`, play a round on the fake phones, refresh the page mid-round.
-
-## Folder map
-
-```
-MinefieldGame/
-  CLAUDE.md                    Instructions for Claude: interview process + build steps
-  index.ts                     Re-exports views
-  assets/
-    Assets.ts                  Asset manifest (import images/sounds here)
-    images/, sounds/
-  models/
-    GameSettings.ts            Tuning constants
-    minefieldEndpoints.ts       The typed wire API (client <-> presenter)
-    minefieldLogic.ts           PURE game rules - no framework imports
-    minefieldLogic.spec.ts      Jest specs for the rules
-    PresenterModel.ts          Player class, game states/events, presenter model + type helper
-    ClientModel.ts             Client model + type helper
-  views/
-    GameComponent.tsx          Boot: wires models + lazy views into the framework
-    Presenter.tsx/.module.css  Big-screen UI, one component per game state, sounds
-    Client.tsx/.module.css     Phone UI, one component per client state
-    index.ts
-```
+Every rule is unit-tested in `minefieldLogic.spec.ts` / `minefieldMap.spec.ts`, and
+`PresenterModel.spec.ts` drives the real presenter — including the check that an explorer's
+onboard response contains no hazard data at all.

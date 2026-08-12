@@ -1,6 +1,7 @@
 import StressatoAssets from "games/stressgame/assets/Assets";
 import TemplateAssets from "games/TemplateGame/assets/Assets";
 import CollageBoardAssets from "games/CollageBoard/assets/Assets";
+import MinefieldAssets from "games/Minefield/assets/Assets";
 import FaceOffAssets from "games/FaceOff/assets/Assets";
 import { GameDescriptor } from "./GameDescriptor";
 import releaseGames from "./gamesListRelease";
@@ -16,6 +17,11 @@ import releaseGames from "./gamesListRelease";
 // and, being outside the manifest, these are already invisible there.
 // -------------------------------------------------------------------
 const debugOnlyGames: GameDescriptor[] = [
+  {
+    name: "Minefield",
+    logoName: MinefieldAssets.images.logo,
+    importThunk: () => import("../Minefield/views/GameComponent"),
+  },
   {
     name: "FaceOff",
     displayName: "Face Off",

@@ -1,73 +1,397 @@
+/* Sapper's Desk: charcoal ground, phosphor-green linework like an ordnance map read under a
+   night scope, amber for warnings, red for detonation. Authored on the fixed 1920x1080
+   presenter canvas - every number here is canvas pixels, not device pixels. */
+
 .gamepresenter {
   width: 100%;
   height: 100%;
-  background-color: rgb(255, 104, 235);
-  background-size: 100%;
-  background-repeat: no-repeat;
+  background-color: #0b0d0a;
+  color: #d6e6d6;
   overflow: hidden;
-  font-size: 40px;
+  font-size: 26px;
   font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
 }
 
-.gamepresenter .gameTitle {
-  font-size: 150%;
-  font-weight: 600;
-}
-
-.gamepresenter button {
-  font-size: 120%;
-  padding: 5px;
-}
-
-.gamepresenter input {
-  font-size: 100%;
-}
-
-.gamepresenter .question {
-  font-size: 150%;
-  font-style: italic;
-  padding: 20px;
-}
-
-.gamepresenter .divRow {
+/* --- frame ------------------------------------------------------------------ */
+.frame {
   display: flex;
-  flex-wrap: nowrap;
+  align-items: center;
+  gap: 16px;
+  height: 78px;
+  padding: 0 28px;
+  border-bottom: 2px solid #23301f;
+  box-sizing: border-box;
 }
 
-.gamepresenter .answerBox {
-  width: 40%;
-  text-align: right;
+.frameSpacer {
+  flex: 1;
 }
 
-.gamepresenter .nameBox {
-  padding: 20px;
+.frameButton {
+  font-size: 20px;
+  padding: 8px 18px;
+  background: #161c14;
+  color: #9fdba1;
+  border: 2px solid #2c3a28;
+  border-radius: 6px;
+  cursor: pointer;
 }
 
-.gamepresenter .roomCode {
-  margin-right: 50px;
+.frameButton:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
-.gamepresenter .gameCanvasFrame {
-  margin: 50px;
+.frameRoom {
+  font-family: "Consolas", "Courier New", monospace;
+  font-size: 28px;
+  letter-spacing: 3px;
+  color: #4dff9e;
 }
 
-.gamepresenter .gameCanvas {
-  background-color: gray;
+.stage {
+  height: calc(1080px - 78px);
+  padding: 24px 32px;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
-.gamepresenter .winnerBanner {
-  font-size: 150%;
+/* --- shared bits ------------------------------------------------------------ */
+.bigTitle {
+  font-size: 82px;
+  font-weight: 800;
+  letter-spacing: 10px;
+  color: #4dff9e;
+}
+
+.sectionTitle {
+  font-size: 22px;
+  letter-spacing: 5px;
+  color: #6f8a6f;
+  margin: 18px 0 8px;
+}
+
+.dim {
+  color: #6f7f6f;
+}
+
+.warn {
+  color: #ffb020;
+}
+
+.pitch {
+  font-size: 24px;
+  line-height: 1.35;
+  color: #a8bda8;
+  max-width: 720px;
+}
+
+.score {
+  font-family: "Consolas", "Courier New", monospace;
+  font-size: 40px;
+  color: #4dff9e;
+}
+
+.clock {
+  font-family: "Consolas", "Courier New", monospace;
+  font-size: 76px;
+  color: #4dff9e;
+  text-align: center;
+}
+
+.urgent {
+  color: #ff5c5c;
+}
+
+/* --- setup ------------------------------------------------------------------ */
+.setup {
+  display: flex;
+  gap: 36px;
+  height: 100%;
+}
+
+.joinPanel {
+  width: 780px;
+  flex-shrink: 0;
+}
+
+.joinLine {
+  font-size: 30px;
+  margin: 14px 0 18px;
+}
+
+.roster {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 26px;
+  max-height: 520px;
+  overflow: hidden;
+}
+
+.nameBox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 14px 6px 6px;
+  background: #131810;
+  border: 2px solid #26331f;
+  border-radius: 999px;
+  font-size: 24px;
+}
+
+.controlPanel {
+  flex: 1;
+  overflow: hidden;
+}
+
+.presetRow {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.preset {
+  font-size: 24px;
+  padding: 10px 22px;
+  background: #131810;
+  color: #9fdba1;
+  border: 2px solid #2c3a28;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.presetOn {
+  background: #1d3a20;
+  border-color: #4dff9e;
+  color: #eaffea;
+}
+
+.blurb {
+  font-size: 22px;
+  color: #9db09d;
+  margin: 10px 0;
+  min-height: 30px;
+}
+
+.advancedToggle {
+  font-size: 20px;
+  padding: 6px 14px;
+  background: transparent;
+  color: #7fb7ff;
+  border: 2px solid #2c3a28;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.knobs {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px 24px;
+  margin: 12px 0;
+}
+
+.knob {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 20px;
+}
+
+.knobLabel {
+  flex: 1;
+  color: #9db09d;
+}
+
+.knobValue {
+  width: 62px;
+  text-align: center;
+  font-family: "Consolas", "Courier New", monospace;
+  color: #4dff9e;
+}
+
+.knobButton {
+  width: 34px;
+  height: 34px;
+  background: #131810;
+  color: #9fdba1;
+  border: 2px solid #2c3a28;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.teamGrid {
+  display: flex;
+  gap: 14px;
+  margin: 14px 0;
+  flex-wrap: wrap;
+}
+
+.teamCard {
+  min-width: 210px;
+  padding: 12px;
+  background: #101410;
+  border: 3px solid #2c3a28;
+  border-radius: 10px;
+}
+
+.teamName {
+  font-size: 24px;
   font-weight: 700;
-  padding: 20px 0;
+  letter-spacing: 3px;
+  margin-bottom: 8px;
 }
 
-.gamepresenter .scoreStrip {
+.memberRow {
   display: flex;
-  flex-wrap: nowrap;
-  margin-left: 60px;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 8px;
+  margin-bottom: 4px;
+  background: transparent;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  color: #d6e6d6;
+  font-size: 20px;
+  cursor: pointer;
+  text-align: left;
 }
 
-.gamepresenter .scoreItem {
-  margin-right: 40px;
-  white-space: nowrap;
+.memberExplorer {
+  border-color: #4dff9e;
+  background: #16241a;
+}
+
+.bootTag {
+  font-size: 16px;
+  letter-spacing: 2px;
+  color: #4dff9e;
+}
+
+.startButton {
+  margin-top: 18px;
+  font-size: 34px;
+  letter-spacing: 6px;
+  padding: 14px 54px;
+  background: #1d3a20;
+  color: #eaffea;
+  border: 3px solid #4dff9e;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.startButton:disabled {
+  opacity: 0.4;
+  cursor: default;
+  border-color: #2c3a28;
+}
+
+/* --- play ------------------------------------------------------------------- */
+.playArea {
+  display: flex;
+  gap: 28px;
+  height: 100%;
+}
+
+.mapPane {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.silhouette {
+  width: 100%;
+  height: 100%;
+}
+
+.mapPlaceholder {
+  color: #45543f;
+  font-size: 40px;
+  letter-spacing: 8px;
+}
+
+.sidePane {
+  width: 520px;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.roundTag {
+  font-size: 22px;
+  letter-spacing: 6px;
+  color: #6f8a6f;
+}
+
+.briefTitle {
+  font-size: 54px;
+  font-weight: 800;
+  letter-spacing: 8px;
+  color: #4dff9e;
+  margin-bottom: 12px;
+}
+
+.briefTeam,
+.liveTeam {
+  border-left: 6px solid #4dff9e;
+  background: #101410;
+  padding: 10px 14px;
+  margin: 10px 0;
+  border-radius: 6px;
+}
+
+.briefTeam {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  font-size: 22px;
+}
+
+.liveTeamHead {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: 2px;
+}
+
+.liveTeamBody {
+  display: flex;
+  justify-content: space-between;
+  font-size: 20px;
+  margin-top: 4px;
+}
+
+.armedTag {
+  color: #ff8a2b;
+  font-size: 20px;
+  letter-spacing: 2px;
+}
+
+.homeTag {
+  color: #4dff9e;
+  font-size: 20px;
+  letter-spacing: 2px;
+}
+
+/* --- game over -------------------------------------------------------------- */
+.gameOver {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  padding-top: 40px;
+}
+
+.finalGrid {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  justify-content: center;
 }

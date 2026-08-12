@@ -93,6 +93,14 @@ const KNOWN: Record<string, Partial<GamePresentation>> = {
     playTime: "∞",
     thumbKind: "photos",
   },
+  Minefield: {
+    category: "Puzzle",
+    blurb:
+      "One player walks a minefield blind while the rest, each holding half the map, talk them across.",
+    players: "2–16",
+    playTime: "20m",
+    thumbKind: "sort",
+  },
   Lexible: {
     category: "Word",
     blurb: "Claim letters and build words across a shared board to outscore the room.",

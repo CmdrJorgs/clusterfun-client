@@ -240,7 +240,8 @@ function buildGeometry(rng: () => number, holeCount: number): Geometry {
       ]);
     }
   }
-  const quadAt = (i: number, j: number) => (i < 0 || j < 0 || i >= span || j >= span ? -1 : j * span + i);
+  const quadAt = (i: number, j: number) =>
+    i < 0 || j < 0 || i >= span || j >= span ? -1 : j * span + i;
   const quadNeighbors = (q: number): number[] => {
     const i = q % span;
     const j = Math.floor(q / span);
@@ -589,7 +590,10 @@ function placeHazards(
   rng: () => number,
 ): { hazards: Hazard[]; walls: Wall[] } {
   const { cells } = geometry;
-  const kinds = HAZARD_ORDER.slice(0, Math.max(1, Math.min(HAZARD_ORDER.length, options.mineKinds)));
+  const kinds = HAZARD_ORDER.slice(
+    0,
+    Math.max(1, Math.min(HAZARD_ORDER.length, options.mineKinds)),
+  );
 
   // The opening move is always safe: nothing sits on the start, and nothing sits next to it
   // either, so a motion mine cannot be armed before anybody has said a word.
@@ -713,7 +717,9 @@ export function generateMinefieldMap(options: MapGenOptions): MinefieldMapData {
   // Nothing placed cleanly. Ship the bare field rather than a field nobody can cross.
   const geometry = anyGeometry ?? buildGeometry(makeRng(options.seed), 0);
   const { start, goal } =
-    anyGeometry === null ? pickStartAndGoal(geometry.cells, makeRng(options.seed + 1)) : anyStartGoal;
+    anyGeometry === null
+      ? pickStartAndGoal(geometry.cells, makeRng(options.seed + 1))
+      : anyStartGoal;
   return {
     seed: options.seed,
     size: MAP_SIZE,

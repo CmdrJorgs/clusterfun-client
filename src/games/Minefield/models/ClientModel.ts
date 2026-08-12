@@ -1,4 +1,5 @@
 import Logger from "js-logger";
+import { action, makeObservable, observable } from "mobx";
 import {
   ISessionHelper,
   ClusterFunGameProps,
@@ -7,20 +8,21 @@ import {
   IStorage,
   GeneralClientGameState,
   ITypeHelper,
-  Vector2,
 } from "libs";
 import { MinefieldGameState } from "./PresenterModel";
-import { BallState, stepBall } from "./minefieldLogic";
 import {
-  MinefieldColorChangeActionEndpoint,
-  MinefieldMessageActionEndpoint,
-  MinefieldOnboardClientEndpoint,
-  MinefieldTapActionEndpoint,
+  type MinefieldFieldView,
+  type MinefieldLocalView,
+  MinefieldMoveEndpoint,
+  MinefieldOnboardEndpoint,
+  type MinefieldRole,
+  type MinefieldTeamStatus,
+  MinefieldTeamUpdateEndpoint,
+  type MinefieldTeamUpdateMessage,
 } from "./minefieldEndpoints";
 
 // -------------------------------------------------------------------
-// Create the typehelper needed for loading and saving the game.
-// Register every custom class the client model can hold.
+// Type helper for save/restore.
 // -------------------------------------------------------------------
 export const getMinefieldClientTypeHelper = (
   sessionHelper: ISessionHelper,
@@ -48,41 +50,74 @@ export const getMinefieldClientTypeHelper = (
       return null;
     },
     shouldStringify(typeName: string, propertyName: string, object: any): boolean {
+      if (object instanceof MinefieldClientModel) {
+        // The field, the local view and the run status are all rebuilt by the very next
+        // onboard, and the presenter is the authority on every one of them.  Saving them
+        // would only create a window where a refreshed phone shows a stale minefield -
+        // which in this game is not a cosmetic problem.
+        return ["field", "local", "status"].indexOf(propertyName) === -1;
+      }
       return true;
     },
     reconstitute(typeName: string, propertyName: string, rehydratedObject: any) {
-      // TODO: re-wrap any MobX observable collections here, e.g.:
-      // switch (propertyName) {
-      //   case "myObservableCollection":
-      //     return observable<number>(rehydratedObject as number[]);
-      // }
       return rehydratedObject;
     },
   };
 };
 
-// Client-side states - one per screen the player's phone can show.
+// Client-side states - one per screen the phone can show.
 export enum MinefieldClientState {
-  Playing = "Playing",
-  EndOfRound = "EndOfRound",
+  Briefing = "Briefing",
+  Exploring = "Exploring",
+  Advising = "Advising",
+  RoundScore = "RoundScore",
 }
 
-const colors = ["white", "red", "orange", "yellow", "blue", "cyan", "magenta", "gray"];
-
 // -------------------------------------------------------------------
-// Client data and logic
-// The client is a thin controller: it captures input, sends it to the
-// presenter, and renders only what the player needs to interact.  It
-// never makes authoritative game decisions.
+// The client: a thin controller.  It captures the explorer's taps and renders whichever
+// fragment of the field the presenter decided this player is entitled to see.  It makes no
+// authoritative decisions - notably it never works out whether a step was fatal, because
+// only the presenter knows what is buried where.
 // -------------------------------------------------------------------
 export class MinefieldClientModel extends ClusterfunClientModel {
-  // Purely local eye-candy state - fine to keep on the client because it
-  // affects nothing authoritative.  Frame math lives in minefieldLogic.ts.
-  ballData: BallState = { x: 0.5, y: 0.5, xm: 0.01, ym: 0.01, color: "#ffffff" };
+  @observable role: MinefieldRole = "waiting";
+  @observable teamId = -1;
+  @observable teamName = "";
+  @observable teamColor = "#ffffff";
+  @observable explorerName = "";
+  @observable advisorCount = 0;
+  @observable totalRounds = 3;
+  @observable secondsLeft = 0;
+  @observable revealed = false;
+  @observable standings: { teamId: number; teamName: string; teamColor: string; score: number }[] =
+    [];
 
-  // -------------------------------------------------------------------
-  // ctor
-  // -------------------------------------------------------------------
+  /** The whole field as this advisor is allowed to see it. Undefined for the explorer. */
+  @observable.ref field: MinefieldFieldView | undefined = undefined;
+  /** Where the explorer stands and what they may step to. Undefined for advisors. */
+  @observable.ref local: MinefieldLocalView | undefined = undefined;
+  @observable.ref status: MinefieldTeamStatus | undefined = undefined;
+
+  /** What just happened to the explorer, for the phone's own feedback. */
+  @observable lastOutcome = "";
+  @observable killedBy = "";
+  @observable moveInFlight = false;
+
+  /**
+   * Local wall-clock deadline for a freeze, so the phone can count down smoothly instead of
+   * waiting for the next message.  The presenter remains the authority: it rejects an early
+   * move whatever this says.
+   */
+  @observable frozenUntilLocalMs = 0;
+
+  get frozenSecondsLeft(): number {
+    return Math.max(0, Math.ceil((this.frozenUntilLocalMs - Date.now()) / 1000));
+  }
+
+  get isFrozen(): boolean {
+    return this.frozenUntilLocalMs > Date.now();
+  }
+
   constructor(
     sessionHelper: ISessionHelper,
     playerName: string,
@@ -90,78 +125,116 @@ export class MinefieldClientModel extends ClusterfunClientModel {
     storage: IStorage,
   ) {
     super("MinefieldClient", sessionHelper, playerName, logger, storage);
-
-    this.ballData.x = this.randomDouble(1.0);
-    this.ballData.y = this.randomDouble(1.0);
-    this.ballData.xm = (this.randomDouble(0.01) + 0.005) * (this.randomInt(2) ? 1 : -1);
-    this.ballData.ym = (this.randomDouble(0.01) + 0.005) * (this.randomInt(2) ? 1 : -1);
-    this.ballData.color = this.randomItem(colors);
+    makeObservable(this);
   }
 
-  // -------------------------------------------------------------------
-  //  reconstitute - runs on fresh construction AND after restoring a
-  //  saved game.  Wire up presenter listeners here, e.g.:
-  //  this.listenToEndpointFromPresenter(SomePushEndpoint, this.handleSomePush);
-  // -------------------------------------------------------------------
   reconstitute() {
     super.reconstitute();
+    this.listenToEndpointFromPresenter(MinefieldTeamUpdateEndpoint, this.handleTeamUpdate);
   }
 
   // -------------------------------------------------------------------
-  //  requestGameStateFromPresenter - the client's ONLY state-sync path.
-  //  Called on join and whenever the presenter broadcasts an invalidate,
-  //  so it must fully rebuild client state from the response (clients
-  //  can miss individual push messages).
+  //  requestGameStateFromPresenter - the phone's only sync path, so it rebuilds EVERYTHING
+  //  from the response.  A phone can miss any individual push (asleep, tunnel, refreshed),
+  //  and an advisor holding a stale field would give advice that gets somebody killed.
   // -------------------------------------------------------------------
   async requestGameStateFromPresenter(): Promise<void> {
-    const response = await this.session.requestPresenter(MinefieldOnboardClientEndpoint, {});
-    this.roundNumber = response.roundNumber;
-    switch (response.gameState) {
-      case MinefieldGameState.Playing:
-        this.gameState = MinefieldClientState.Playing;
-        break;
-      case MinefieldGameState.EndOfRound:
-        this.gameState = MinefieldClientState.EndOfRound;
-        break;
-      default:
-        Logger.debug(`Presenter is in state: ${response.gameState}`);
-        this.gameState = GeneralClientGameState.WaitingToStart;
-        break;
-    }
+    const response = await this.session.requestPresenter(MinefieldOnboardEndpoint, {});
+    action(() => {
+      this.roundNumber = response.round;
+      this.totalRounds = response.totalRounds;
+      this.role = response.role;
+      this.teamId = response.teamId;
+      this.teamName = response.teamName;
+      this.teamColor = response.teamColor;
+      this.explorerName = response.explorerName;
+      this.advisorCount = response.advisorCount;
+      this.secondsLeft = response.secondsLeft;
+      this.revealed = response.revealed;
+      this.standings = response.standings;
+      this.field = response.field;
+      this.local = response.local;
+      this.status = response.status;
+      if (response.status) {
+        this.frozenUntilLocalMs = Date.now() + response.status.frozenMsLeft;
+      }
+
+      switch (response.gameState) {
+        case MinefieldGameState.Briefing:
+          this.gameState = MinefieldClientState.Briefing;
+          break;
+        case MinefieldGameState.Running:
+          this.gameState =
+            response.role === "explorer"
+              ? MinefieldClientState.Exploring
+              : MinefieldClientState.Advising;
+          break;
+        case MinefieldGameState.RoundScore:
+          this.gameState = MinefieldClientState.RoundScore;
+          break;
+        default:
+          Logger.debug(`Presenter is in state: ${response.gameState}`);
+          this.gameState = GeneralClientGameState.WaitingToStart;
+          break;
+      }
+    })();
     this.saveCheckpoint();
   }
 
   // -------------------------------------------------------------------
-  // gameThink - frame-by-frame local logic (called from the view's
-  // animation loop).  Arcade-style games do continuous work here;
-  // turn-based games may not need it at all.
+  //  handleTeamUpdate - a small delta so an advisor's map follows their explorer live.
   // -------------------------------------------------------------------
-  gameThink(elapsed_ms: number) {
-    this.ballData = stepBall(this.ballData);
-  }
+  handleTeamUpdate = (message: MinefieldTeamUpdateMessage) => {
+    action(() => {
+      this.status = message.status;
+      this.lastOutcome = message.event;
+      this.frozenUntilLocalMs = Date.now() + message.status.frozenMsLeft;
+    })();
+  };
 
   // -------------------------------------------------------------------
-  // Player actions - each one sends a small typed message to the
-  // presenter, which makes the authoritative change.
+  //  doMove - the explorer taps a neighbouring cell.
+  //
+  //  Nothing is applied optimistically.  In every other game in this repo a hopeful local
+  //  update is harmless, but here the answer to "did that work" is "you are dead", and a
+  //  phone that moved its own marker before the presenter ruled would be showing a lie at
+  //  the one moment the player is looking hardest.
   // -------------------------------------------------------------------
-  doColorChange() {
-    const hex = Array.from("0123456789ABCDEF");
-    let colorStyle = "#";
-    for (let i = 0; i < 6; i++) colorStyle += this.randomItem(hex);
-    this.session.sendMessageToPresenter(MinefieldColorChangeActionEndpoint, { colorStyle });
+  async doMove(cellId: number): Promise<void> {
+    if (this.role !== "explorer" || this.moveInFlight || this.isFrozen) return;
+    const serial = this.status ? this.status.steps : 0;
+    action(() => {
+      this.moveInFlight = true;
+    })();
+    try {
+      const response = await this.session.requestPresenter(MinefieldMoveEndpoint, {
+        toCellId: cellId,
+        stepSerial: serial,
+      });
+      action(() => {
+        this.lastOutcome = response.outcome;
+        this.killedBy = response.killedBy ?? "";
+        if (response.local) this.local = response.local;
+        if (response.status) {
+          this.status = response.status;
+          this.frozenUntilLocalMs = Date.now() + response.status.frozenMsLeft;
+        }
+      })();
+      this.saveCheckpoint();
+    } catch (error) {
+      Logger.warn(`Minefield move failed: ${error}`);
+    } finally {
+      action(() => {
+        this.moveInFlight = false;
+      })();
+    }
   }
 
-  doMessage() {
-    const messages = ["Hi!", "Bye?", "What's up?", "Oh No!", "Hoooooweeee!!", "More gum."];
-    this.session.sendMessageToPresenter(MinefieldMessageActionEndpoint, {
-      message: this.randomItem(messages),
-    });
-  }
-
-  doTap(x: number, y: number) {
-    x = Math.floor(x * 1000) / 1000;
-    y = Math.floor(y * 1000) / 1000;
-
-    this.session.sendMessageToPresenter(MinefieldTapActionEndpoint, { point: new Vector2(x, y) });
-  }
+  /** Clear the death/goal banner once the player has taken it in. */
+  acknowledgeOutcome = () => {
+    action(() => {
+      this.lastOutcome = "";
+      this.killedBy = "";
+    })();
+  };
 }

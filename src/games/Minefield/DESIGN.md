@@ -7,7 +7,7 @@
 
 A co-operative bomb-disposal game of asymmetric information. One player per team is the
 **Explorer**: they walk a mosaic minefield they cannot see, one cell at a time, from a start
-cell to a goal. Everyone else on the team is an **Advisor**: each holds a *fragment* of the
+cell to a goal. Everyone else on the team is an **Advisor**: each holds a _fragment_ of the
 map intel and can see the whole field on their phone — but nobody holds all of it. The team
 has to **talk out loud**, stitch their partial maps together, and steer a blind explorer
 through live ordnance before the clock runs out.
@@ -19,7 +19,7 @@ is split among the advisors → explorer taps one of the neighbouring cells they
 presenter resolves the step (safe / freeze / boom) → trail extends on the big screen →
 repeat until GOAL or the round timer expires → score → next round, new map, new explorer.`
 
-Turn-based *per team*, but all teams move **simultaneously and independently** — nobody
+Turn-based _per team_, but all teams move **simultaneously and independently** — nobody
 waits for anybody.
 
 ---
@@ -29,25 +29,25 @@ waits for anybody.
 You didn't pin these down, so the spec below commits to a choice and says why. These are the
 four decisions most expensive to change later.
 
-| # | Question | **Decision** | Why |
-|---|----------|--------------|-----|
-| 1 | What happens on death? | **Respawn at the start cell, same map, keep playing.** Deaths are the score, nobody is eliminated. The dead run stays on the big screen as a faded "ghost trail" with a 💀 at the blast. | Elimination ends a single-team game 20 seconds in, and leaves the whole room watching. Respawn keeps everyone playing and turns each death into *information* — which is the actual fun. It also makes your "number of viable paths" knob meaningful: you're expected to survive mistakes and re-route. |
-| 2 | Multi-team map | **All teams share ONE map (same geometry, same hazard placement), but hazard *state* is per-team.** Arming, fuses, and multi-step counts are tracked independently per team, and a detonation only kills the team that caused it. | Teams move asynchronously, so a shared "after two movements" fuse has no defined clock, and cross-team detonations would mean one team can grief another on their first game. Shared geometry keeps the race fair and keeps the presenter overlay (all trails on one shape) working. **Rival trails are visible on the big screen — watching another team die tells you where a mine is. That is intentional.** Cross-team detonation is a deferred variant. |
-| 3 | Difficulty UI | **Four presets (Recruit / Sapper / Veteran / Nightmare) plus a collapsed "Advanced" panel** exposing every knob from the pitch. | Presets get a party started in one tap; the knobs are explicitly in your pitch so they stay reachable. Presets are literally named knob-sets in `GameSettings.ts`. |
-| 4 | v1 hazard set | **All five mine types, missing cells, and walls+switches are IN**, with switches capped at 3 per map. | Each one is load-bearing for a different reason (below), and the generator's verifier has to exist anyway. The cap is what keeps the solver cheap. |
+| #   | Question               | **Decision**                                                                                                                                                                                                                      | Why                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| --- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | What happens on death? | **Respawn at the start cell, same map, keep playing.** Deaths are the score, nobody is eliminated. The dead run stays on the big screen as a faded "ghost trail" with a 💀 at the blast.                                          | Elimination ends a single-team game 20 seconds in, and leaves the whole room watching. Respawn keeps everyone playing and turns each death into _information_ — which is the actual fun. It also makes your "number of viable paths" knob meaningful: you're expected to survive mistakes and re-route.                                                                                                                                                      |
+| 2   | Multi-team map         | **All teams share ONE map (same geometry, same hazard placement), but hazard _state_ is per-team.** Arming, fuses, and multi-step counts are tracked independently per team, and a detonation only kills the team that caused it. | Teams move asynchronously, so a shared "after two movements" fuse has no defined clock, and cross-team detonations would mean one team can grief another on their first game. Shared geometry keeps the race fair and keeps the presenter overlay (all trails on one shape) working. **Rival trails are visible on the big screen — watching another team die tells you where a mine is. That is intentional.** Cross-team detonation is a deferred variant. |
+| 3   | Difficulty UI          | **Four presets (Recruit / Sapper / Veteran / Nightmare) plus a collapsed "Advanced" panel** exposing every knob from the pitch.                                                                                                   | Presets get a party started in one tap; the knobs are explicitly in your pitch so they stay reachable. Presets are literally named knob-sets in `GameSettings.ts`.                                                                                                                                                                                                                                                                                           |
+| 4   | v1 hazard set          | **All five mine types, missing cells, and walls+switches are IN**, with switches capped at 3 per map.                                                                                                                             | Each one is load-bearing for a different reason (below), and the generator's verifier has to exist anyway. The cap is what keeps the solver cheap.                                                                                                                                                                                                                                                                                                           |
 
 ---
 
 ## Ambiguity is the game — no labels, one orientation
 
 **Nothing on either screen names a cell.** No compass bearings, no ID numbers, no letters.
-Working out how to describe "that one, the pointy one, no — the *other* pointy one" under time
+Working out how to describe "that one, the pointy one, no — the _other_ pointy one" under time
 pressure **is the game**. Handing the room a ready-made vocabulary would solve the exact
 problem the players are there to solve, so:
 
 - The explorer's phone shows their current cell centred, with each **adjacent** cell drawn in
   its **true relative geometry and true relative size** — and nothing else. Walls on their
-  edges are drawn (a wall is physically visible; it is the *switch* that is secret). Cells
+  edges are drawn (a wall is physically visible; it is the _switch_ that is secret). Cells
   they have already stood on are dimmed, because remembering your own footsteps is not the
   puzzle.
 - Every advisor's map highlights the explorer's current cell and outlines exactly the same
@@ -56,7 +56,7 @@ problem the players are there to solve, so:
 
 **The one concession: both views share a single fixed world orientation** (the map's "up" is
 up on every screen). Rotating the explorer's local view relative to the advisors' map would
-make the game *impossible* rather than *hard* — it turns every instruction into a mental
+make the game _impossible_ rather than _hard_ — it turns every instruction into a mental
 rotation puzzle instead of a description problem. Shape, size, and relative position are the
 shared ground; inventing the words on top of that is the players' job.
 
@@ -86,23 +86,23 @@ No computational-geometry dependency and no Voronoi library. Deterministic from 
      the exact, testable definition of your "number of viable paths" knob: `1` is a tightrope,
      `3` is forgiving.
    - **Dynamic solvability** — a simulator BFS over `(cell, switchMask, armedFuses)` proving a
-     living route exists *including* motion/invisible-mine fuses and wall/switch ordering.
+     living route exists _including_ motion/invisible-mine fuses and wall/switch ordering.
      Switch capped at 3 → mask space ≤ 8, so this stays cheap.
 
 ## Hazards (all v1)
 
-| Hazard | Rule | Why it's in v1 |
-|---|---|---|
-| **Standard mine** | Instant kill on step. | The baseline; no game without it. |
-| **Multi-step mine** | Survives 2–5 steps; the **total** is shown to advisors and **never counted down**. The Nth step kills. | The most distinctive thing in the pitch. It moves the load from *reading a map* to *remembering* — which is what makes advisors talk to each other. |
-| **Freeze mine** | Explorer cannot move for 10s. | Cheap, pure tension, and it can never make a map unwinnable. |
-| **Motion mine** | Arms when the explorer enters any cell **adjacent** to it. Detonates after **that explorer's next 2 movements**, killing them if they are then within 1 cell of it. | The reason "viable paths" matters — an armed mine turns a map into a two-move escape problem. |
-| **Invisible mine** | **Never** shown to any advisor. Arms when stepped on; same 2-move fuse and blast as a motion mine. | Reuses the motion-mine fuse machinery almost for free, and it's the one hazard advisors cannot solve — only survive. |
+| Hazard              | Rule                                                                                                                                                                | Why it's in v1                                                                                                                                      |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Standard mine**   | Instant kill on step.                                                                                                                                               | The baseline; no game without it.                                                                                                                   |
+| **Multi-step mine** | Survives 2–5 steps; the **total** is shown to advisors and **never counted down**. The Nth step kills.                                                              | The most distinctive thing in the pitch. It moves the load from _reading a map_ to _remembering_ — which is what makes advisors talk to each other. |
+| **Freeze mine**     | Explorer cannot move for 10s.                                                                                                                                       | Cheap, pure tension, and it can never make a map unwinnable.                                                                                        |
+| **Motion mine**     | Arms when the explorer enters any cell **adjacent** to it. Detonates after **that explorer's next 2 movements**, killing them if they are then within 1 cell of it. | The reason "viable paths" matters — an armed mine turns a map into a two-move escape problem.                                                       |
+| **Invisible mine**  | **Never** shown to any advisor. Arms when stepped on; same 2-move fuse and blast as a motion mine.                                                                  | Reuses the motion-mine fuse machinery almost for free, and it's the one hazard advisors cannot solve — only survive.                                |
 
-**Obstacles:** **walls** block a specific shared *edge* between two cells (drawn as a thick
+**Obstacles:** **walls** block a specific shared _edge_ between two cells (drawn as a thick
 line) and are removed by stepping on their paired **switch** cell elsewhere on the map;
 **missing cells** fall out of step 3 above. Walls are the strongest collaboration mechanic —
-they force an advisor to route the explorer *away* from the goal first.
+they force an advisor to route the explorer _away_ from the goal first.
 
 ## Intel distribution (`distributeIntel`, pure + specced)
 
@@ -111,14 +111,14 @@ by definition):
 
 1. Shuffle hazards and deal them round-robin so **every hazard has at least one advisor** —
    full coverage is guaranteed by construction, never by luck.
-2. Then reveal each hazard to `overlap × (advisors − 1)` *additional* advisors.
+2. Then reveal each hazard to `overlap × (advisors − 1)` _additional_ advisors.
 
 So the knob is genuinely "how much do your intel sets overlap", exactly as pitched. One
 advisor ⇒ they see everything, automatically. Spec asserts total coverage at every overlap
 value and the expected per-advisor share.
 
 > **Intel is filtered on the presenter, never on the phone.** An advisor's device is only ever
-> *sent* the hazards they own, and the explorer's device is never sent any hazard at all — so
+> _sent_ the hazards they own, and the explorer's device is never sent any hazard at all — so
 > opening devtools reveals nothing. Same principle as FaceOff's opaque `entryId`s.
 
 ---
@@ -133,7 +133,7 @@ value and the expected per-advisor share.
   dealt from the existing pool at the start of the **next** round (mid-round they see only
   what is already public: the trail).
 - **Drop** → they keep their seat and their intel (per the platform contract). If the
-  *explorer* drops, the team is frozen with an "explorer disconnected" banner and the host
+  _explorer_ drops, the team is frozen with an "explorer disconnected" banner and the host
   gets a **Reassign explorer** button; a rejoin-by-name puts them straight back in the boots.
 
 ## Round shape / phases
@@ -157,13 +157,18 @@ value and the expected per-advisor share.
 
 ## Message table
 
-| Endpoint | Dir | Request → Response |
-|---|---|---|
-| `MinefieldOnboardEndpoint` | C→P req | `{}` → `{state, round, totalRounds, role, teamId, teamColor, …}` **plus a role-shaped payload**: advisor gets `{cells[], outline, myIntel[], explorer{cell, options[]}, trail[]}`; explorer gets `{here, neighbours[{cellId, poly, visited, walled}], frozenMsLeft, deaths}` — geometry only, no labels. Full phone rebuild. |
-| `MinefieldMoveEndpoint` | C→P req | `{toCellId, stepSerial}` → `{accepted, outcome: "moved"\|"frozen"\|"blocked"\|"dead", frozenMsLeft?, neighbours[], deaths}` — the explorer's only input. `stepSerial` makes a retried move idempotent. |
-| `MinefieldTeamUpdateEndpoint` | P→C f&f | `{teamId, explorerCell, options[], trailTail, event?: "step"\|"death"\|"freeze"\|"goal"\|"armed"}` — small delta so advisor maps track the explorer live without a full re-onboard. |
-| `MinefieldRevealEndpoint` | P→C f&f | `{teamId, hazards[]}` — post-mortem reveal after a death/round end, so a team learns what killed them. |
-| `InvalidateStateEndpoint` | P→C f&f | (shared) phase change → every client re-onboards. |
+| Endpoint                      | Dir     | Request → Response                                                                                                                                                                                                                                                                                                           |
+| ----------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MinefieldOnboardEndpoint`    | C→P req | `{}` → `{state, round, totalRounds, role, teamId, teamColor, …}` **plus a role-shaped payload**: advisor gets `{cells[], outline, myIntel[], explorer{cell, options[]}, trail[]}`; explorer gets `{here, neighbours[{cellId, poly, visited, walled}], frozenMsLeft, deaths}` — geometry only, no labels. Full phone rebuild. |
+| `MinefieldMoveEndpoint`       | C→P req | `{toCellId, stepSerial}` → `{accepted, outcome: "moved"\|"frozen"\|"blocked"\|"dead", frozenMsLeft?, neighbours[], deaths}` — the explorer's only input. `stepSerial` makes a retried move idempotent.                                                                                                                       |
+| `MinefieldTeamUpdateEndpoint` | P→C f&f | `{teamId, explorerCell, options[], trailTail, event?: "step"\|"death"\|"freeze"\|"goal"\|"armed"}` — small delta so advisor maps track the explorer live without a full re-onboard.                                                                                                                                          |
+| `InvalidateStateEndpoint`     | P→C f&f | (shared) phase change → every client re-onboards.                                                                                                                                                                                                                                                                            |
+
+**Declassification is not its own endpoint.** The draft had a `MinefieldRevealEndpoint`; it
+turned out to be a second way of saying what onboard already says. At round end the presenter
+sets `revealed` and invalidates, and the advisor's next onboard returns the field
+**unredacted** — one code path for "what is this advisor allowed to see", which is exactly
+the code path that must never be wrong.
 | Join/Quit/Ping/GameOver/Pause/Resume/Terminate | shared | base framework endpoints. |
 
 **Sizing:** the mosaic geometry (~80 cells, quantised to integers in a 0…1000 space) is sent
