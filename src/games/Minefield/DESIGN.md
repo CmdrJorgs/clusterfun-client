@@ -38,25 +38,30 @@ four decisions most expensive to change later.
 
 ---
 
-## The shared vocabulary problem (the single most important mechanic)
+## Ambiguity is the game — no labels, one orientation
 
-An explorer who says "there's one up and to the left" and an advisor looking at a map in a
-different orientation is a game that does not work. So **both screens name the same cells the
-same way**, and that naming is the whole interface:
+**Nothing on either screen names a cell.** No compass bearings, no ID numbers, no letters.
+Working out how to describe "that one, the pointy one, no — the *other* pointy one" under time
+pressure **is the game**. Handing the room a ready-made vocabulary would solve the exact
+problem the players are there to solve, so:
 
 - The explorer's phone shows their current cell centred, with each **adjacent** cell drawn in
-  its **true relative geometry** and labelled with a **compass bearing** (`N`, `NNE`, `NE`, …
-  from a 16-point compass, assigned from centroid angles and **guaranteed unique** among the
-  neighbours of that cell).
-- Every advisor's map highlights the explorer's current cell and labels its neighbours with
-  the **identical bearings**.
+  its **true relative geometry and true relative size** — and nothing else. Walls on their
+  edges are drawn (a wall is physically visible; it is the *switch* that is secret). Cells
+  they have already stood on are dimmed, because remembering your own footsteps is not the
+  puzzle.
+- Every advisor's map highlights the explorer's current cell and outlines exactly the same
+  neighbour cells as selectable, so advisors know the real menu of options — with no labels
+  on them either.
 
-So "take NE" is unambiguous for everyone, without ever showing the explorer the map.
-Cell ID numbers are deliberately **not** shown — reading a list of numbers off a map is not a
-conversation, and the bearing keeps the talk spatial.
+**The one concession: both views share a single fixed world orientation** (the map's "up" is
+up on every screen). Rotating the explorer's local view relative to the advisors' map would
+make the game *impossible* rather than *hard* — it turns every instruction into a mental
+rotation puzzle instead of a description problem. Shape, size, and relative position are the
+shared ground; inventing the words on top of that is the players' job.
 
-`assignBearings(center, neighbours) → label[]` is a pure function with a spec asserting
-uniqueness and correct quadrants.
+> Consequence for scoring: the fastest teams will be the ones that invent a naming convention
+> in round 1 and reuse it. That is the intended arc across a 3-round game.
 
 ---
 
@@ -154,9 +159,9 @@ value and the expected per-advisor share.
 
 | Endpoint | Dir | Request → Response |
 |---|---|---|
-| `MinefieldOnboardEndpoint` | C→P req | `{}` → `{state, round, totalRounds, role, teamId, teamColor, …}` **plus a role-shaped payload**: advisor gets `{cells[], outline, myIntel[], explorer{cell,bearings[]}, trail[]}`; explorer gets `{here, neighbours[{cellId,bearing,poly,visited,walled}], frozenMsLeft, deaths}`. Full phone rebuild. |
+| `MinefieldOnboardEndpoint` | C→P req | `{}` → `{state, round, totalRounds, role, teamId, teamColor, …}` **plus a role-shaped payload**: advisor gets `{cells[], outline, myIntel[], explorer{cell, options[]}, trail[]}`; explorer gets `{here, neighbours[{cellId, poly, visited, walled}], frozenMsLeft, deaths}` — geometry only, no labels. Full phone rebuild. |
 | `MinefieldMoveEndpoint` | C→P req | `{toCellId, stepSerial}` → `{accepted, outcome: "moved"\|"frozen"\|"blocked"\|"dead", frozenMsLeft?, neighbours[], deaths}` — the explorer's only input. `stepSerial` makes a retried move idempotent. |
-| `MinefieldTeamUpdateEndpoint` | P→C f&f | `{teamId, explorerCell, bearings[], trailTail, event?: "step"\|"death"\|"freeze"\|"goal"\|"armed"}` — small delta so advisor maps track the explorer live without a full re-onboard. |
+| `MinefieldTeamUpdateEndpoint` | P→C f&f | `{teamId, explorerCell, options[], trailTail, event?: "step"\|"death"\|"freeze"\|"goal"\|"armed"}` — small delta so advisor maps track the explorer live without a full re-onboard. |
 | `MinefieldRevealEndpoint` | P→C f&f | `{teamId, hazards[]}` — post-mortem reveal after a death/round end, so a team learns what killed them. |
 | `InvalidateStateEndpoint` | P→C f&f | (shared) phase change → every client re-onboards. |
 | Join/Quit/Ping/GameOver/Pause/Resume/Terminate | shared | base framework endpoints. |
@@ -177,6 +182,10 @@ without telling anybody where it is). Host controls: Pause, Reassign explorer, S
 
 - Reaching the goal: `GOAL_POINTS` (1000) + `TIME_BONUS_PER_SEC` (5) × seconds left.
 - Each death: −`DEATH_PENALTY` (150), team score floored at 0.
+- **A death resets that team's field to pristine**: back to the start cell, armed fuses
+  cleared, multi-step counts zeroed, switches un-flipped. One clean mental model ("the run
+  starts over") beats a half-remembered board state, and it keeps the advisors' remembered
+  step-counts honest rather than silently stale.
 - Round rank breaks ties by fewest deaths, then fewest steps.
 - Every rule (step resolution, fuse ticking, multi-step counting, wall/switch state, scoring)
   lives in pure `minefieldLogic.ts` + `minefieldMap.ts` with Jest specs. Models only
@@ -205,12 +214,15 @@ header. Reduced-motion respected.
 **In:** join + roster + avatars + host start gate; difficulty presets + Advanced knobs; 1–4
 teams on a shared map; irregular mosaic generation with missing cells, verified for route
 count and dynamic solvability; all five mine types; walls + switches (≤3); guaranteed-coverage
-intel split with an overlap knob; presenter-side intel filtering; explorer local-neighbourhood
-view with unique compass bearings; advisor full-map view with live explorer tracking;
-respawn-on-death with ghost trails; 3 rounds with rotating explorers; scoring + scoreboard +
-fanfare; full checkpoint/resume; Sapper's Desk styling.
+intel split with an overlap knob; presenter-side intel filtering; unlabelled explorer
+local-neighbourhood view in true relative geometry; advisor full-map view with live explorer
+tracking and matching selectable-cell highlighting; respawn-on-death with ghost trails;
+3 rounds with rotating explorers; scoring + scoreboard + fanfare; full checkpoint/resume;
+Sapper's Desk styling.
 
-**Deferred (later):** cross-team detonations (one team's blunder killing another's explorer);
+**Deferred (later):** any built-in naming/labelling aid (bearings, cell IDs, grid refs) —
+deliberately omitted, see §Ambiguity is the game; cross-team detonations (one team's blunder
+killing another's explorer);
 per-team mirrored hazard layouts; >4 teams; advisor annotation/ping tools (drawing on the map
 for other advisors); a text-chat fallback for remote play; hazard variety beyond the five
 types (chain mines, decoys, timed gates); escalating per-round difficulty within a game;
