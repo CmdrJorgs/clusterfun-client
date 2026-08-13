@@ -225,16 +225,25 @@ than the browser window — which is what makes it land correctly at every windo
 Leaving must be possible from anywhere, obvious when you look for it, and impossible to hit by
 accident. It also must not mean what players think it means — see 5.4.
 
-5.1 **While a round is in play**, the client's only exit is the **X in `ClientHeader`'s fixed
-120px right region**, with `aria-label="Quit the game"`. Every client **MUST** pass `onQuit` to
-`ClientHeader` — all ten do — and **MUST NOT** offer a second quit control during play. Two ways
-out mid-round is two chances to leave by mistake.
+5.1 The client's only exit is the **X in `ClientHeader`'s fixed 120px right region**, with
+`aria-label="Quit the game"`. Every client **MUST** pass `onQuit` to `ClientHeader` — all ten
+already do — and **MUST NOT** render a quit control anywhere else, **in any game state,
+including `GameOver` and `JoinError`**. `onQuit` on `ClientHeader` should be the only
+`quitApp()` call site in a client view.
 
-5.1a On a **terminal screen** — `GameOver`, `JoinError` — the client **SHOULD** offer an explicit
-labelled `Quit` button in the body. The X is a corner affordance for abandoning something in
-progress; once the game is over there is nothing to lose by mistake, and a player needs an
-obvious way out rather than a corner glyph. CollageBoard, Lexible, Eittris, OneOhOne and FaceOff
-already do this on their GameOver screens, and it is correct.
+The exception people reach for is the terminal screen: the game is over, nothing is left to lose
+by a mis-tap, so why not offer a friendly labelled button? Because the X is not a mid-round
+affordance that a finished game makes redundant — it is **the way out of a ClusterFun game**, and
+it is only learned by being the way out every time. A body button on the last screen teaches a
+player that the real exit is wherever this game decided to put it, which is the exact drift
+`ClientHeader` was built to end: it was seven different strips before it was one, and a player
+who plays two games in an evening should not have to find the quit button twice. The final screen
+is where a player is most likely to be looking for the exit, so it is the worst screen on which
+to put it somewhere new.
+
+`ClientHeader` is an unconditional child of `.gameclient` in all ten clients — it does not depend
+on game state — so the X is present on `GameOver` and `JoinError` already. A game removing its
+terminal-screen button is not removing the player's way out; it is removing the second one.
 
 5.2 The presenter's only exit is the **Quit button at the left of the chrome strip**
 ([§4.2](#4-buttons-and-chrome)).
@@ -262,6 +271,14 @@ phone in a tunnel never sends a Quit. So:
 | `quit`       | The player pressed X                    | Back to the lobby, seat still warm |
 | `hostEnded`  | The game reached GameOver               | The game is over — show the result |
 | `terminated` | The host closed the room, or booted you | This room is finished              |
+
+> **Deviations today — this is the biggest single cleanup in this document.** Nine of the ten
+> clients render a second `Quit` button on their `GameOver` screen, in addition to the header X:
+> `CollageBoard/Client.tsx:840`, `Eittris:932`, `FaceOff:346`, `Lexible:160`, `OneOhOne:231`,
+> `PartyPix:487`, `PassTheAux:410`, `TemplateGame:191`, `RetroSpectro/client/Client.tsx:142`.
+> Stressato is the only client without one. All nine call the same `quitApp()` the X calls, so
+> they are pure duplicates — removing each is a delete, with no replacement needed and no state
+> in which a player is left without an exit.
 
 ---
 
@@ -381,15 +398,15 @@ being the same UI on every device. Most of the rules above have the same propert
 
 Checkable by reading the source, in rough order of value:
 
-| Rule                                            | Check                                                                    |
-| ----------------------------------------------- | ------------------------------------------------------------------------ |
-| [§2](#2-minimum-text-size)                      | No `font-size: <24px` in any game `*.module.css`                         |
-| [§6.7](#too-many)                               | Every lobby card's range is inside its model's `minPlayers`/`maxPlayers` |
-| [§3.3](#3-player-names)                         | Every `PlayerAvatar` call site passes `colorIndex`                       |
-| [§7.1](#7-background-bleed-and-the-content-box) | Every `Client.tsx` passes `backdropClassName` to `UINormalizer`          |
-| [§1.1](#1-room-codes)                           | No `Client.tsx` references `roomId`                                      |
-| [§5.1](#5-leaving-the-game)                     | Every `Client.tsx` passes `onQuit` to `ClientHeader`                     |
-| [§4.6](#4-buttons-and-chrome)                   | No overlay uses `position: absolute` where it means to cover the canvas  |
+| Rule                                            | Check                                                                      |
+| ----------------------------------------------- | -------------------------------------------------------------------------- |
+| [§2](#2-minimum-text-size)                      | No `font-size: <24px` in any game `*.module.css`                           |
+| [§6.7](#too-many)                               | Every lobby card's range is inside its model's `minPlayers`/`maxPlayers`   |
+| [§3.3](#3-player-names)                         | Every `PlayerAvatar` call site passes `colorIndex`                         |
+| [§7.1](#7-background-bleed-and-the-content-box) | Every `Client.tsx` passes `backdropClassName` to `UINormalizer`            |
+| [§1.1](#1-room-codes)                           | No `Client.tsx` references `roomId`                                        |
+| [§5.1](#5-leaving-the-game)                     | `ClientHeader`'s `onQuit` is the ONLY `quitApp()` call site in each client |
+| [§4.6](#4-buttons-and-chrome)                   | No overlay uses `position: absolute` where it means to cover the canvas    |
 
 The remainder — placement, hierarchy, whether a pause explains itself — needs eyes, and belongs
 in review.
